@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, Query, Request, Response
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
@@ -10,13 +10,14 @@ from app.db import get_db
 from app.envelope import ok
 from app.models_orm import AuditLog
 from app.redis_client import redis_ping
-from app.schemas import AuditBody
+from app.schemas import AskAnswer, AskBody, AuditBody
 from app.services.bootstrap import bootstrap
 from app.services.districts import get_districts, state_totals
 from app.services.flows import get_district_flows
 from app.services.graph import get_communities, get_graph
 from app.services.incidents import get_incidents
 from app.services.models_svc import get_anomalies, get_models, get_risk_scores
+from app.services.nl_query import AskFailed, ask, schema_summary
 from app.services.offenders import get_offender_profiles
 from app.services.series import get_active_alerts, get_series
 from app.services.snapshot import load, load_envelope_bytes
@@ -210,3 +211,63 @@ def bootstrap_route(user: UserDep, db: Session = Depends(get_db)):
 def audit_write(body: AuditBody, request: Request, user: UserDep, db: Session = Depends(get_db)):
     _audit_async(db, user, body.action, request.url.path, body.resource_refs, body.detail)
     return ok({"logged": True})
+
+
+@router.get("/ask/schema")
+def ask_schema(user: UserDep, source: str | None = None):
+    """The tables and columns the assistant can answer from."""
+    settings = get_settings()
+    return ok(schema_summary(source or settings.ask_default_source))
+
+
+@router.post("/ask")
+def ask_route(body: AskBody, request: Request, user: UserDep, db: Session = Depends(get_db)):
+    """Answer a natural-language question about the crime database.
+
+    The question is translated to a read-only query by a model that sees only
+    the schema catalogue; the query runs here. Every call is written to the
+    audit log per §10.1 — the question, the query it produced, and the records
+    it touched — whether or not it succeeded.
+    """
+    settings = get_settings()
+    if not settings.ask_enabled:
+        raise HTTPException(status_code=503, detail="The assistant is disabled.")
+
+    try:
+        result = ask(db, body.question, body.source)
+    except AskFailed as exc:
+        _audit_async(
+            db,
+            user,
+            "ask_failed",
+            request.url.path,
+            [],
+            f"q={body.question!r} error={exc} detail={exc.detail}",
+        )
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    _audit_async(
+        db,
+        user,
+        "ask",
+        request.url.path,
+        result.evidence,
+        f"q={body.question!r} source={result.source} model={result.model} query={result.query!r}",
+    )
+
+    return ok(
+        AskAnswer(
+            answer=result.answer,
+            query=result.query,
+            columns=result.columns,
+            rows=result.rows,
+            evidence=result.evidence,
+            source=result.source,
+            model=result.model,
+            answerable=result.answerable,
+            redactedIdentifiers=result.redacted_identifiers,
+            elapsedMs=result.elapsed_ms,
+            notes=result.notes,
+        ).model_dump(),
+        total=len(result.rows),
+    )

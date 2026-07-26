@@ -25,6 +25,52 @@ class Settings(BaseSettings):
     db_max_overflow: int = 20
     environment: str = "development"
 
+    # --- Natural-language query endpoint (POST /api/ask) ---------------------
+    # The model translates a question into a query using the schema catalogue
+    # only; it never receives rows. See app/services/nl_schema.py.
+    ask_enabled: bool = True
+    ask_default_source: str = "local"  # "local" (this backend's DB) | "catalyst"
+
+    # Default is the free, local, keyless option — which is also the one
+    # DATA-AND-MODELS.md mandates ("self-hosted models only").
+    ask_provider: str = "ollama"  # ollama | openai_compatible | anthropic
+
+    # ollama — free, runs on your machine, nothing leaves it.
+    ollama_host: str = "http://127.0.0.1:11434"
+    ollama_model: str = "qwen2.5-coder:7b"
+
+    # openai_compatible — any chat-completions endpoint (free tier, vLLM, LM Studio).
+    openai_compatible_base_url: str = ""
+    openai_compatible_model: str = ""
+    openai_compatible_api_key: str = ""
+
+    # anthropic — paid; only used when ask_provider is "anthropic".
+    anthropic_api_key: str = ""
+    ask_effort: str = "medium"  # low | medium | high | xhigh | max
+
+    # --- Zoho Catalyst Data Store as a data source ---------------------------
+    # Secrets belong in the environment, never in the repo. Leave blank to
+    # disable the Catalyst source; /api/ask?source=local keeps working.
+    catalyst_project_id: str = ""
+    catalyst_environment_id: str = ""
+    catalyst_refresh_token: str = ""
+    catalyst_client_id: str = ""
+    catalyst_client_secret: str = ""
+    catalyst_dc: str = "in"
+    catalyst_environment: str = "Development"
+
+    @property
+    def catalyst_configured(self) -> bool:
+        return all(
+            [
+                self.catalyst_project_id,
+                self.catalyst_environment_id,
+                self.catalyst_refresh_token,
+                self.catalyst_client_id,
+                self.catalyst_client_secret,
+            ]
+        )
+
     @property
     def cors_origin_list(self) -> list[str]:
         parts = [o.strip() for o in self.cors_origins.split(",") if o.strip()]

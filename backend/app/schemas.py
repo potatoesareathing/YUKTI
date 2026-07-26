@@ -277,6 +277,41 @@ class AuditBody(BaseModel):
     detail: str = ""
 
 
+class AskBody(BaseModel):
+    """A natural-language question for POST /api/ask."""
+
+    question: str = Field(min_length=1, max_length=1000)
+    source: Optional[Literal["local", "catalyst"]] = None
+
+    @field_validator("question")
+    @classmethod
+    def _strip(cls, v: str) -> str:
+        cleaned = v.strip()
+        if not cleaned:
+            raise ValueError("question must not be blank")
+        return cleaned
+
+
+class AskAnswer(BaseModel):
+    """The answer, the query that produced it, and the records behind it.
+
+    ``evidence`` is mandatory in spirit per BACKEND.md — an empty list is only
+    valid for aggregates, and ``notes`` says so explicitly when that happens.
+    """
+
+    answer: str
+    query: str
+    columns: list[str] = Field(default_factory=list)
+    rows: list[dict[str, Any]] = Field(default_factory=list)
+    evidence: list[str] = Field(default_factory=list)
+    source: str
+    model: str
+    answerable: bool = True
+    redactedIdentifiers: int = 0
+    elapsedMs: int = 0
+    notes: list[str] = Field(default_factory=list)
+
+
 class BootstrapPayload(BaseModel):
     districts: list[DistrictMetrics]
     stateTotals: StateTotals
