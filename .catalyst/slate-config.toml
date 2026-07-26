@@ -1,0 +1,8 @@
+framework = "react-vite"
+install_command = "npm install"
+build_path = "dist"
+build_command = "npm run build"
+deployment_name = "default"
+root_path = "./"
+node_runtime = "20"
+env_variables = [ "VITE_API_BASE_URL=https://yukti-api-50044348137.development.catalystappsail.in" ]

@@ -44,12 +44,14 @@ interface LandingSceneProps {
   progress: number
   features: DistrictFeature[]
   incidents: Incident[]
+  /** Bumps when `/api/bootstrap` hydrates — constellation must not keep an empty mount cache. */
+  revision?: number
 }
 
-export function LandingScene({ progress, features, incidents }: LandingSceneProps) {
+export function LandingScene({ progress, features, incidents, revision = 0 }: LandingSceneProps) {
   const reduced = useMemo(prefersReducedMotion, [])
   const narrow = useIsNarrow()
-  const network = useMemo(() => getNetwork(), [])
+  const network = useMemo(() => getNetwork(), [revision])
   const [hotspotsMounted, setHotspotsMounted] = useState(false)
 
   const bengaluru = useMemo(
@@ -164,6 +166,7 @@ export function LandingScene({ progress, features, incidents }: LandingSceneProp
           showPredicted={pThree > 0.62}
           interactive={false}
           opacity={Math.min(1, pThree * 2.4)}
+          revision={revision}
         />
       )}
 

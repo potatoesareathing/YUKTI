@@ -16,6 +16,12 @@ backend/*.db
 backend/*.db-*
 backend/lib/
 backend/appsail-bundle.zip
+appsail-stage/
+appsail-bundle.zip
+appsail-bundle.zip.bak
+.catalystrc
+catalyst-debug.log
+slate-deploy-output.log
 backend/__pycache__/
 **/__pycache__/
 *.pyc

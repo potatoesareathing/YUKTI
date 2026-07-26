@@ -25,11 +25,13 @@ os.environ.setdefault("ENVIRONMENT", "production")
 
 
 def ensure_data() -> None:
-    """Seed + nightly publish if snapshots are missing (first boot on AppSail)."""
+    """Seed + nightly publish if snapshots are missing (first boot on AppSail).
+
+    Heavy ML/graph deps are imported only when rebuild is required so AppSail
+    can ship a slim package with a precomputed yukti.db.
+    """
     from app.db import SessionLocal, init_db
     from app.models_orm import ApiSnapshot, District
-    from app.jobs.nightly import run as nightly_run
-    from app.seed.run_seed import seed
 
     init_db()
     db = SessionLocal()
@@ -39,8 +41,15 @@ def ensure_data() -> None:
     finally:
         db.close()
 
+    if has_districts and has_bootstrap:
+        print("AppSail boot: snapshots present — skipping seed/nightly")
+        return
+
     if not has_districts:
         print("AppSail boot: seeding database…")
+        from app.seed.run_seed import seed
+        from app.jobs.nightly import run as nightly_run
+
         db = SessionLocal()
         try:
             seed(db, force=False)

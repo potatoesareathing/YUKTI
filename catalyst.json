@@ -1,6 +1,18 @@
 {
   "project_name": "YUKTI",
   "deployment": {
-    "targets": ["appsail"]
-  }
+    "targets": ["appsail", "slate"]
+  },
+  "appsail": [
+    {
+      "source": "appsail-stage",
+      "name": "yukti-api"
+    }
+  ],
+  "slate": [
+    {
+      "name": "yukti",
+      "source": "."
+    }
+  ]
 }

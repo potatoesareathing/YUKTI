@@ -70,9 +70,14 @@ export function Landing() {
   return (
     <>
       <div className="fixed inset-0 z-0">
-        {ready ? (
-          <Scene interactive={false}>
-            <LandingScene progress={progress} features={features} incidents={incidents} />
+        {ready && dataEpoch > 0 ? (
+          <Scene interactive={false} key={dataEpoch}>
+            <LandingScene
+              progress={progress}
+              features={features}
+              incidents={incidents}
+              revision={dataEpoch}
+            />
           </Scene>
         ) : (
           <Calibrating />

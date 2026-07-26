@@ -65,10 +65,10 @@ export function Platform() {
       <main className="relative min-h-0 flex-1">
         {usesScene && (
           <div className="absolute inset-0 z-0">
-            {ready ? (
-              <Scene>
+            {ready && dataEpoch > 0 ? (
+              <Scene key={dataEpoch}>
                 {meta.scene === 'graph' ? (
-                  <DialScene />
+                  <DialScene revision={dataEpoch} />
                 ) : (
                   <MapScene features={features} incidents={incidents} />
                 )}
@@ -80,8 +80,8 @@ export function Platform() {
         )}
 
         <div className={`relative z-10 h-full pb-6 ${usesScene ? 'pointer-events-none' : 'overflow-y-auto'}`} key={dataEpoch}>
-          {active === 'MOD-01' && <M1Geospatial ready={ready} onPick={selectDistrict} />}
-          {active === 'MOD-02' && <M2Network ready={ready} />}
+          {active === 'MOD-01' && <M1Geospatial ready={ready && dataEpoch > 0} onPick={selectDistrict} />}
+          {active === 'MOD-02' && <M2Network ready={ready && dataEpoch > 0} />}
           {active === 'MOD-03' && <M3Predictive />}
           {active === 'MOD-04' && <M4Trends />}
           {active === 'MOD-05' && <M5Behaviour />}

@@ -1,14 +1,15 @@
 {
-  "name": "yukti-api",
-  "command": "python3 catalyst_start.py",
-  "buildPath": ".",
-  "stack": "Python_3_11",
+  "command": "sh -c 'PYTHONPATH=lib:. python3 -u catalyst_start.py'",
+  "build_path": ".",
+  "stack": "python_3_11",
   "env_variables": {
     "DATABASE_URL": "sqlite:///./yukti.db",
     "AUTH_BYPASS": "true",
     "AUDIT_READS": "false",
     "ENVIRONMENT": "production",
-    "CORS_ORIGINS": "*"
+    "CORS_ORIGINS": "*",
+    "PYTHONPATH": "lib:."
   },
-  "memory": 2048
+  "memory": 2048,
+  "scripts": {}
 }

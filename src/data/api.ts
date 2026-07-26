@@ -25,7 +25,7 @@ import type {
 import { CENSUS_2011, KARNATAKA_STATIONS } from './census'
 import type { StationMetrics } from './stations'
 import type { OffenderProfile } from './offenders'
-import type { DistrictFlow, DistrictHub, FlowAggregate } from './flows'
+import type { FlowAggregate } from './flows'
 import type { PathLink, PathResult } from './graphpaths'
 
 export type { StationMetrics } from './stations'

@@ -35,8 +35,9 @@ export function M2Network({ ready }: { ready: boolean }) {
   const toggleLayer = useYukti((s) => s.toggleLayer)
   const openEvidence = useEvidence()
 
+  // Parent remounts this module via dataEpoch after bootstrap; read caches fresh.
   const graph = useMemo(() => getNetwork(), [])
-  const byId = useMemo(() => new Map(graph.nodes.map((n) => [n.id, n])), [graph.nodes])
+  const byId = useMemo(() => new Map(graph.nodes.map((n) => [n.id, n])), [graph])
   const communities = useMemo(() => getCommunities(), [])
   const origins = useMemo(() => suggestedOrigins(8), [])
 

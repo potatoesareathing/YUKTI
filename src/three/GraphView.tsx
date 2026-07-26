@@ -22,31 +22,27 @@ import {
   type Mesh,
 } from 'three'
 import { KIND_COLOR, PALETTE } from '@/lib/palette'
-import type { GraphNode, NodeKind } from '@/data/types'
+import type { GraphData, GraphNode, NodeKind } from '@/data/types'
 import { useYukti } from '@/store/useYukti'
 
 /**
- * The whole entity graph, in the manner of Obsidian's graph view.
+ * Entity graph view — Obsidian-style force layout over the cached network.
  *
- * Earlier versions of this module tried to make a dense graph legible by
- * reducing it — aggregating to districts, capping hops, showing one hop at a
- * time. This takes the opposite bet, and it is the bet Obsidian makes with
- * vaults of thousands of notes: show EVERYTHING, quietly, and let interaction do
- * the work.
+ * Bootstrap can ship thousands of FIR-scale nodes. Running d3-force over that
+ * entire set (and warming with hundreds of ticks) freezes the main thread so
+ * the WebGL canvas never paints. The layout therefore draws a high-centrality
+ * core, always expanding to include the current selection / path endpoints and
+ * their neighbours. Path finding and side panels still use the full cached graph.
  *
- * Three things make that work, and all three are load-bearing:
+ * Three interaction rules stay load-bearing:
  *
  *   PHYSICS NEVER STOPS.  The simulation holds a small non-zero alpha forever,
- *     so the graph keeps breathing instead of freezing into a diagram. That
- *     motion is what makes a dense picture feel navigable rather than dead.
+ *     so the graph keeps breathing instead of freezing into a diagram.
  *
  *   HOVER IS A SPOTLIGHT.  Pointing at a node drops everything that is not it
- *     or its direct neighbours to near-invisible. Any local neighbourhood
- *     becomes instantly readable without removing a single node from the view.
+ *     or its direct neighbours to near-invisible.
  *
- *   LABELS ARE EARNED.  Text appears for what you are pointing at and for the
- *     few highest-centrality nodes. Labelling everything is what turns a graph
- *     into noise.
+ *   LABELS ARE EARNED.  Text appears for the pointer subject and the busiest nodes.
  */
 
 /** Alpha the simulation is held at. Enough to drift, not enough to wander. */
@@ -64,6 +60,11 @@ const ROTATE_SPEED = 0.02
 /** How close the camera settles to a selected node. */
 const FOCUS_DISTANCE = 52
 const UP = new Vector3(0, 1, 0)
+/**
+ * Soft cap for the force layout. The client-side demo graph sits well under this;
+ * the AppSail bootstrap graph does not (~6–7k nodes).
+ */
+const VIEW_NODE_LIMIT = 420
 
 interface Placed {
   node: GraphNode
@@ -72,7 +73,48 @@ interface Placed {
   color: Color
 }
 
-export function GraphView() {
+/** Induced subgraph: centrality core + any focus ids and their one-hop neighbours. */
+function pickViewGraph(full: GraphData, focusIds: string[], limit = VIEW_NODE_LIMIT): GraphData {
+  if (full.nodes.length === 0 || full.nodes.length <= limit) return full
+
+  const byId = new Map(full.nodes.map((n) => [n.id, n]))
+  const keep = new Set<string>()
+  const focus = focusIds.filter((id) => byId.has(id))
+
+  for (const id of focus) {
+    keep.add(id)
+    for (const e of full.edges) {
+      if (e.source === id) keep.add(e.target)
+      else if (e.target === id) keep.add(e.source)
+    }
+  }
+
+  const ranked = [...full.nodes].sort(
+    (a, b) => b.centrality - a.centrality || b.degree - a.degree,
+  )
+  for (const n of ranked) {
+    if (keep.size >= limit) break
+    keep.add(n.id)
+  }
+
+  if (keep.size > limit) {
+    const pinned = new Set(focus)
+    const trim = [...keep]
+      .filter((id) => !pinned.has(id))
+      .sort((a, b) => (byId.get(a)?.centrality ?? 0) - (byId.get(b)?.centrality ?? 0))
+    for (const id of trim) {
+      if (keep.size <= limit) break
+      keep.delete(id)
+    }
+  }
+
+  return {
+    nodes: full.nodes.filter((n) => keep.has(n.id)),
+    edges: full.edges.filter((e) => keep.has(e.source) && keep.has(e.target)),
+  }
+}
+
+export function GraphView({ revision = 0 }: { revision?: number }) {
   const selectedNode = useYukti((s) => s.selectedNode)
   const selectNode = useYukti((s) => s.selectNode)
   const pathFrom = useYukti((s) => s.pathFrom)
@@ -91,9 +133,18 @@ export function GraphView() {
   const scratch = useMemo(() => new Color(), [])
   const [hovered, setHovered] = useState<string | null>(null)
 
-  const graph = useMemo(() => getNetwork(), [])
+  const focusIds = useMemo(
+    () => [selectedNode, pathFrom, pathTo].filter((id): id is string => !!id),
+    [selectedNode, pathFrom, pathTo],
+  )
 
-  /* The simulation, built once and left running. */
+  // `revision` bumps when bootstrap hydrates so we never keep an empty mount snapshot.
+  const graph = useMemo(
+    () => pickViewGraph(getNetwork(), focusIds),
+    [revision, focusIds],
+  )
+
+  /* The simulation, rebuilt when the visible subgraph changes. */
   const sim = useMemo(() => {
     const simNodes: SimNode[] = graph.nodes.map((n) => ({ id: n.id }))
     const sizeOf = new Map(
@@ -127,8 +178,10 @@ export function GraphView() {
       .alphaMin(0)
 
     // Warm it up so the first frame is already a graph, not a ball.
+    // Scale ticks with size — a fixed 320 on thousands of nodes never returns.
+    const warm = Math.min(320, Math.max(60, Math.floor(80_000 / Math.max(simNodes.length, 1))))
     simulation.stop()
-    simulation.tick(320)
+    simulation.tick(warm)
 
     const byId = new Map(simNodes.map((n) => [n.id, n]))
     return { simulation, simNodes, byId }

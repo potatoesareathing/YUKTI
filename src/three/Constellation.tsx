@@ -102,6 +102,8 @@ interface ConstellationProps {
   showPredicted?: boolean
   interactive?: boolean
   opacity?: number
+  /** Bumps when bootstrap hydrates so sync accessors are re-read. */
+  revision?: number
 }
 
 export function Constellation({
@@ -110,6 +112,7 @@ export function Constellation({
   showPredicted = false,
   interactive = true,
   opacity = 1,
+  revision = 0,
 }: ConstellationProps) {
   const selectedDistrict = useYukti((s) => s.selectedDistrict)
   const selectDistrict = useYukti((s) => s.selectDistrict)
@@ -126,7 +129,7 @@ export function Constellation({
   const observedColor = useMemo(() => new Color(PALETTE.bhuvan), [])
   const predictedColor = useMemo(() => new Color(PALETTE.brass), [])
 
-  const aggregate = useMemo(() => getDistrictFlows(2), [])
+  const aggregate = useMemo(() => getDistrictFlows(2), [revision])
 
   /* Hubs, positioned on their district centroids. */
   const hubs = useMemo<HubPlace[]>(() => {
@@ -240,7 +243,7 @@ export function Constellation({
     geo.setAttribute('position', new Float32BufferAttribute(positions, 3))
 
     return { placed: [...placed.entries()], nodes: inFocus, edges: geo }
-  }, [focus, features, hubByDistrict])
+  }, [focus, features, hubByDistrict, revision])
 
   /* Shared geometry for the hub markers. */
   const markers = useMemo(() => {

@@ -122,11 +122,11 @@ export function MapScene({ features, incidents }: MapSceneProps) {
  * MOD-02. No scripted camera here — the analyst drives it with orbit controls,
  * the way a graph view is expected to behave.
  */
-export function DialScene() {
+export function DialScene({ revision = 0 }: { revision?: number }) {
   return (
     <>
       <Rig />
-      <GraphView />
+      <GraphView revision={revision} />
     </>
   )
 }
