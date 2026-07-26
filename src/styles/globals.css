@@ -1,0 +1,225 @@
+@import 'tailwindcss';
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   YUKTI design tokens
+   Brass on ink. The palette derives from Survey of India cartography, brass
+   theodolites and KSP khaki — not from screen conventions.
+   ───────────────────────────────────────────────────────────────────────────── */
+@theme {
+  --color-ink: #070a0f;
+  --color-ink-2: #0b111a;
+  --color-slate: #101823;
+  --color-slate-2: #16202d;
+  --color-rule: #1e2a38;
+  --color-rule-2: #2a3a4c;
+
+  --color-brass: #c9a227;
+  --color-brass-dim: #8a701a;
+  --color-brass-lit: #f0d072;
+
+  --color-khaki: #dcd3be;
+  --color-khaki-dim: #8d8877;
+
+  --color-bhuvan: #4c9fc0;
+  --color-bhuvan-dim: #2b6076;
+
+  /* Reserved. Statistically significant control-limit breach only. */
+  --color-redzone: #ff3b2f;
+
+  /* Sequential risk ramp — never rainbow. */
+  /* Sequential, monotonically lighter with magnitude — see lib/palette.ts */
+  --color-risk-1: #22525f;
+  --color-risk-2: #a8822a;
+  --color-risk-3: #dd6a2f;
+  --color-risk-4: #ff6b45;
+
+  --font-display: 'IBM Plex Sans Condensed', ui-sans-serif, system-ui, sans-serif;
+  --font-body: 'IBM Plex Sans', ui-sans-serif, system-ui, sans-serif;
+  --font-mono: 'IBM Plex Mono', ui-monospace, monospace;
+  --font-kannada: 'Noto Serif Kannada', 'IBM Plex Sans', serif;
+}
+
+@layer base {
+  *,
+  *::before,
+  *::after {
+    box-sizing: border-box;
+  }
+
+  html {
+    background: var(--color-ink);
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+
+  body {
+    margin: 0;
+    background: var(--color-ink);
+    color: var(--color-khaki);
+    font-family: var(--font-body);
+    font-weight: 300;
+    overflow-x: hidden;
+  }
+
+  /* The instrument reads out numbers. Numbers are tabular, always. */
+  :where(.tnum, [data-num]) {
+    font-family: var(--font-mono);
+    font-variant-numeric: tabular-nums;
+    font-feature-settings: 'tnum' 1;
+  }
+
+  ::selection {
+    background: var(--color-brass);
+    color: var(--color-ink);
+  }
+
+  :focus-visible {
+    outline: 1px solid var(--color-brass);
+    outline-offset: 2px;
+  }
+
+  /* Scrollbar as a hairline instrument track, not a chrome default. */
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: var(--color-rule-2) transparent;
+  }
+  *::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  *::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  *::-webkit-scrollbar-thumb {
+    background: var(--color-rule-2);
+  }
+  *::-webkit-scrollbar-thumb:hover {
+    background: var(--color-brass-dim);
+  }
+}
+
+@layer utilities {
+  /* Small-caps technical label. Used for every eyebrow and field name. */
+  .label {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    font-weight: 500;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--color-khaki-dim);
+  }
+
+  .label-brass {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    font-weight: 500;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--color-brass);
+  }
+
+  .hairline {
+    border-color: var(--color-rule);
+  }
+
+  /* Survey plate — the recurring panel surface. */
+  .plate {
+    background:
+      linear-gradient(180deg, rgb(255 255 255 / 0.016), transparent 60%),
+      var(--color-slate);
+    border: 1px solid var(--color-rule);
+  }
+
+  /* Corner ticks — the instrument frame motif. Applied to key panels only. */
+  .ticked {
+    position: relative;
+  }
+  .ticked::before,
+  .ticked::after {
+    content: '';
+    position: absolute;
+    width: 7px;
+    height: 7px;
+    border-color: var(--color-brass);
+    opacity: 0.55;
+    pointer-events: none;
+  }
+  .ticked::before {
+    top: -1px;
+    left: -1px;
+    border-top: 1px solid;
+    border-left: 1px solid;
+  }
+  .ticked::after {
+    bottom: -1px;
+    right: -1px;
+    border-bottom: 1px solid;
+    border-right: 1px solid;
+  }
+
+  /* Fine graticule mesh — cartographic ground texture. */
+  .graticule-bg {
+    background-image:
+      linear-gradient(var(--color-rule) 1px, transparent 1px),
+      linear-gradient(90deg, var(--color-rule) 1px, transparent 1px);
+    background-size: 64px 64px;
+    opacity: 0.28;
+  }
+
+  .anim-in {
+    animation: yk-in 0.7s cubic-bezier(0.16, 1, 0.3, 1) both;
+  }
+
+  .sweep-line {
+    animation: yk-sweep 3.4s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+  }
+}
+
+@keyframes yk-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes yk-sweep {
+  0% {
+    transform: translateX(-100%);
+    opacity: 0;
+  }
+  12%,
+  88% {
+    opacity: 1;
+  }
+  100% {
+    transform: translateX(100%);
+    opacity: 0;
+  }
+}
+
+@keyframes yk-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.35;
+  }
+}
+
+/* Motion is an instrument behaviour, not a flourish. When the user opts out,
+   states still change — they just cut instead of transitioning. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
