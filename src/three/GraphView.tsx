@@ -120,6 +120,16 @@ export function GraphView({ revision = 0 }: { revision?: number }) {
   const pathFrom = useYukti((s) => s.pathFrom)
   const pathTo = useYukti((s) => s.pathTo)
   const showPredicted = useYukti((s) => s.showPredicted)
+  /**
+   * A district chosen on the map narrows the graph here.
+   *
+   * This is the one link between the geospatial and network views, and it runs
+   * one way on purpose: MOD-01 answers "where", so a district selected there is
+   * a question the analyst is still asking when they arrive. Nothing in this
+   * module writes back — a view that silently retargets the module you came
+   * from stops being navigable.
+   */
+  const districtFilter = useYukti((s) => s.selectedDistrict)
 
   const { camera } = useThree()
   const controls = useThree((state) => state.controls) as
@@ -345,8 +355,9 @@ export function GraphView({ revision = 0 }: { revision?: number }) {
       const mesh = meshes.current.get(kind)
       if (!mesh) continue
       list.forEach((p, i) => {
-        const dim = focus ? !focus.keep.has(p.node.id) : false
-        const isFocus = focus?.id === p.node.id
+        const outside = districtFilter ? p.node.district !== districtFilter : false
+        const dim = outside || (focus ? !focus.keep.has(p.node.id) : false)
+        const isFocus = focus?.id === p.node.id && !outside
 
         dummy.position.set(
           (p.sim.x ?? 0) * SPREAD,
@@ -403,9 +414,20 @@ export function GraphView({ revision = 0 }: { revision?: number }) {
   )
 
   const labelled = useMemo(() => {
-    if (!focus) return alwaysLabelled
-    return focus.keep
-  }, [focus, alwaysLabelled])
+    if (focus) return focus.keep
+    // With a district filter on, label what survives it rather than the
+    // state-wide top six — most of which are dimmed and would read as noise.
+    if (districtFilter) {
+      return new Set(
+        placed
+          .filter((p) => p.node.district === districtFilter)
+          .sort((a, b) => b.node.centrality - a.node.centrality)
+          .slice(0, 8)
+          .map((p) => p.node.id),
+      )
+    }
+    return alwaysLabelled
+  }, [focus, alwaysLabelled, districtFilter, placed])
 
   /**
    * Frame the graph from its actual extent rather than a guessed distance. The
@@ -445,7 +467,7 @@ export function GraphView({ revision = 0 }: { revision?: number }) {
           <lineBasicMaterial
             color={PALETTE.bhuvan}
             transparent
-            opacity={focus ? 0.06 : 0.5}
+            opacity={focus || districtFilter ? 0.06 : 0.5}
             depthWrite={false}
           />
         </lineSegments>

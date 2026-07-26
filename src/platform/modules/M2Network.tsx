@@ -1,9 +1,11 @@
 import { commonNeighbours, edgeLabel, getCommunities, getNetwork, shortestPath, suggestedOrigins } from '@/data/api'
 import { useEffect, useMemo } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { Panel, Stat, Field, Empty, Tag, DecisionSupportNote } from '@/ui/primitives'
 import { useYukti } from '@/store/useYukti'
 import { useEvidence } from '@/ui/EvidenceDrawer'
 import { KIND_COLOR, PALETTE } from '@/lib/palette'
+import { SLUG_BY_ID } from '../modules'
 import { pct } from '@/lib/format'
 import type { Evidence, GraphNode } from '@/data/types'
 
@@ -34,6 +36,9 @@ export function M2Network({ ready }: { ready: boolean }) {
   const showPredicted = useYukti((s) => s.showPredicted)
   const toggleLayer = useYukti((s) => s.toggleLayer)
   const openEvidence = useEvidence()
+  const districtFilter = useYukti((s) => s.selectedDistrict)
+  const selectDistrict = useYukti((s) => s.selectDistrict)
+  const navigate = useNavigate()
 
   // Parent remounts this module via dataEpoch after bootstrap; read caches fresh.
   const graph = useMemo(() => getNetwork(), [])
@@ -57,12 +62,17 @@ export function M2Network({ ready }: { ready: boolean }) {
     const node = read('node')
     if (node !== null && origins[node]) selectNode(origins[node].id)
 
+    // ?district= mirrors MOD-01's, so the narrowed state is linkable and a
+    // walkthrough can open straight into it.
+    const district = params.get('district')
+    if (district) selectDistrict(district)
+
     const path = read('path')
     if (path !== null && origins[path] && origins[0] && path !== 0) {
       setPathFrom(origins[0].id)
       setPathTo(origins[path].id)
     }
-  }, [origins, selectNode, setPathFrom, setPathTo])
+  }, [origins, selectNode, setPathFrom, setPathTo, selectDistrict])
 
   const selected = selectedNode ? byId.get(selectedNode) : null
   const fromNode = pathFrom ? byId.get(pathFrom) : null
@@ -120,10 +130,39 @@ export function M2Network({ ready }: { ready: boolean }) {
   }
 
   const predictedCount = graph.edges.filter((e) => e.predicted).length
+  const inDistrict = districtFilter
+    ? graph.nodes.filter((n) => n.district === districtFilter).length
+    : 0
 
   return (
     <div className="grid h-full grid-cols-1 gap-3 p-3 lg:grid-cols-[280px_1fr_320px]">
       <div className="pointer-events-auto hidden min-h-0 flex-col gap-3 overflow-y-auto pr-1 lg:flex">
+        {/* A cross-module filter has to explain itself. Without this, someone
+            arriving from the map finds most of the graph greyed out and reads
+            it as broken rather than as narrowed. */}
+        {districtFilter && (
+          <div
+            className="plate ticked flex shrink-0 items-center gap-2 px-3 py-2"
+            style={{ borderColor: PALETTE.brass }}
+          >
+            <span className="min-w-0 flex-1">
+              <span className="label-brass block">Narrowed from the map</span>
+              <span className="block text-[0.82rem] leading-snug text-khaki">
+                {districtFilter}
+              </span>
+              <span className="label block" style={{ fontSize: 9 }}>
+                {inDistrict} entities in view
+              </span>
+            </span>
+            <button
+              onClick={() => selectDistrict(null)}
+              className="label shrink-0 border border-rule px-2 py-1 transition-colors hover:border-brass hover:text-brass"
+            >
+              Show all
+            </button>
+          </div>
+        )}
+
         <Panel title="Start here" reference="Most connected" ticked className="shrink-0">
           <div className="border-b border-rule px-3 py-2">
             <p className="text-[0.74rem] leading-relaxed text-khaki-dim">
@@ -310,6 +349,16 @@ export function M2Network({ ready }: { ready: boolean }) {
                   </Field>
                 ))}
               </div>
+
+              <button
+                onClick={() => {
+                  selectDistrict(selected.district)
+                  navigate(`/platform/${SLUG_BY_ID['MOD-01']}`)
+                }}
+                className="label mb-3 w-full border border-rule px-3 py-2 transition-colors hover:border-brass hover:text-brass"
+              >
+                Show {selected.district} on the map →
+              </button>
 
               <div className="mb-3 flex gap-2">
                 <button

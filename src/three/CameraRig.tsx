@@ -50,7 +50,7 @@ export const STATIONS = {
    */
   dial: { position: [0, 66, 60], target: [0, 1, 0] },
   /** Near-top-down working view for the platform's map module. */
-  plan: { position: [0, 176, 56], target: [0, 0, 2] },
+  plan: { position: [0, 224, 70], target: [0, 0, 2] },
 } as const satisfies Record<string, CameraStation>
 
 export type StationName = keyof typeof STATIONS

@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { Panel, Stat, Field, Tag, DecisionSupportNote, Empty } from '@/ui/primitives'
 import { RankedBars } from '@/ui/charts'
 import { useEvidence } from '@/ui/EvidenceDrawer'
+import { useYukti } from '@/store/useYukti'
 import { PALETTE } from '@/lib/palette'
 import { shortDate } from '@/lib/format'
 import { OffenderPanel } from './M5Offenders'
@@ -45,6 +46,17 @@ export function M5Behaviour() {
     new URLSearchParams(window.location.search).get('view') === 'offenders' ? 'offenders' : 'mo',
   )
   const [offenderId, setOffenderId] = useState<string | null>(null)
+  const selectNode = useYukti((s) => s.selectNode)
+
+  /**
+   * An offender here IS a node in MOD-02's graph — same id, same record. Writing
+   * the selection through means switching to Network lands on the person you
+   * were just reading about, instead of on whatever was selected before.
+   */
+  const openOffender = (id: string) => {
+    setOffenderId(id)
+    selectNode(id)
+  }
   const openEvidence = useEvidence()
 
   useEffect(() => {
@@ -139,7 +151,7 @@ export function M5Behaviour() {
             <OffenderPanel
               offenders={offenders}
               selected={offender}
-              onSelect={setOffenderId}
+              onSelect={openOffender}
               onEvidence={openEvidence}
             />
           ) : (
