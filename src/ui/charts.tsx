@@ -295,7 +295,7 @@ function StlPanel({
           <span className="tnum" style={{ fontSize: 10, color: hover !== null ? PALETTE.brass : INK_MUTED }}>
             {hover !== null
               ? `${shortDate(new Date(series.points[hover].at))} · ${series.points[hover][component].toFixed(1)}`
-              : `${series.breaches.length} breach${series.breaches.length === 1 ? '' : 'es'}`}
+              : `${series.breaches.length} spike${series.breaches.length === 1 ? '' : 's'} flagged`}
           </span>
           <span className="label" style={{ fontSize: 9 }}>
             {monthLabel(new Date(series.points[series.points.length - 1].at))}

@@ -62,19 +62,23 @@ export function M4Trends() {
           </div>
 
           <div className="grid grid-cols-2 gap-4 border-b border-rule p-3 sm:grid-cols-4">
-            <Stat label="Latest week" value={latest.value.toFixed(0)} />
+            <Stat label="This week" value={latest.value.toFixed(0)} />
             <Stat
-              label="vs 13 weeks ago"
+              label="Change vs 3 months"
               value={`${change >= 0 ? '+' : ''}${(change * 100).toFixed(1)}%`}
               tone={change > 0.08 ? 'alert' : 'default'}
             />
             <Stat
-              label="Breaches"
+              label="Spikes detected"
               value={String(series.breaches.length)}
               tone={series.breaches.length ? 'alert' : 'default'}
-              sub="Over 104 weeks"
+              sub="In the last 2 years"
             />
-            <Stat label="Control limit" value={`±${series.controlLimit.toFixed(1)}`} sub="CUSUM h = 4.2σ" />
+            <Stat
+              label="Alert threshold"
+              value={`±${series.controlLimit.toFixed(1)}`}
+              sub="CUSUM · h = 4.2σ"
+            />
           </div>
 
           <StlChart series={series} />

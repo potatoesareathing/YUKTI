@@ -91,7 +91,12 @@ export function M3Predictive() {
               size="sm"
               sub={`${(scores[0].score * 100).toFixed(0)} of 100`}
             />
-            <Stat label="Anomalies flagged" value={String(anomalies.length)} tone="cool" sub="For review" />
+            <Stat
+              label="Flagged for review"
+              value={String(anomalies.length)}
+              tone="cool"
+              sub="Out of pattern for their area"
+            />
           </div>
           <div className="border-t border-rule p-3">
             <DecisionSupportNote />
@@ -268,9 +273,9 @@ function DistrictContext({ name }: { name: string }) {
         <Field name="Police stations">{d.stations}</Field>
         <Field name="Urban">{d.urbanPct}%</Field>
         <Field name="Literacy">{d.literacyPct}%</Field>
-        <Field name="Rate / 100k">{inr(d.rate)}</Field>
-        <Field name="Clearance">{d.clearancePct}%</Field>
-        <Field name="Period change">
+        <Field name="Per 100,000 people">{inr(d.rate)}</Field>
+        <Field name="Cases cleared">{d.clearancePct}%</Field>
+        <Field name="Change vs last period">
           <span style={{ color: d.trend > 0 ? PALETTE.redzone : PALETTE.bhuvan }}>{delta(d.trend)}</span>
         </Field>
         <Field name="Red zone">

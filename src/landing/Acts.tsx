@@ -5,10 +5,13 @@ import { compact, inr } from '@/lib/format'
 /**
  * Act overlays.
  *
- * Copy is deliberately technical. This is a platform for crime analysts and the
- * judges of a datathon, and both are better served by naming the actual
- * estimator than by a sentence about empowering decision-makers. Every method
- * named here is one the technical solution document commits to.
+ * Two audiences read this page and they need different things. A district SP
+ * needs to know what the platform DOES; a datathon judge needs to see that the
+ * methods are real. So every method named here is one the technical solution
+ * document commits to — but it is named in the annotation slot, under a plain
+ * headline, never as the primary label. "Red zones · 3 · spiking vs own
+ * history" tells an officer what happened; the CUSUM that decided it lives one
+ * level down, in MOD-04, where someone would go looking for it.
  */
 
 interface ActProps {
@@ -53,7 +56,7 @@ export function ActOne({ opacity }: ActProps) {
       />
 
       <div className="relative max-w-3xl">
-        <div className="label-brass mb-6 flex flex-wrap items-center gap-x-3 gap-y-1">
+        <div className="label-brass mb-3 flex flex-wrap items-center gap-x-3 gap-y-1">
           <span style={{ fontFamily: "'Noto Serif Kannada', serif", letterSpacing: 0 }}>
             ಕರ್ನಾಟಕ ರಾಜ್ಯ ಪೊಲೀಸ್
           </span>
@@ -61,12 +64,18 @@ export function ActOne({ opacity }: ActProps) {
           <span>State Crime Records Bureau</span>
         </div>
 
-        {/* The Kannada wordmark leads. English annotates it. */}
+        {/* The Kannada wordmark leads. English annotates it.
+            Leading must clear the script, not squeeze it. A sub-1 line height
+            is a Latin display trick: it works because Latin capitals sit inside
+            the em box. Kannada does not — ಯ rises above it and the ಿ vowel sign
+            hangs below — so 0.82 made the line box smaller than the glyphs and
+            the wordmark collided with the eyebrow above and the lockup below. */}
         <h1
-          className="leading-[0.82] text-khaki"
+          className="text-khaki"
           style={{
             fontFamily: "'Noto Serif Kannada', serif",
-            fontSize: 'clamp(4.5rem, 15vw, 13rem)',
+            fontSize: 'clamp(3.6rem, 11.5vw, 9.5rem)',
+            lineHeight: 1.24,
             fontWeight: 600,
             textShadow: '0 0 90px rgba(201,162,39,0.22)',
           }}
@@ -74,7 +83,7 @@ export function ActOne({ opacity }: ActProps) {
           ಯುಕ್ತಿ
         </h1>
 
-        <div className="mt-5 flex flex-wrap items-baseline gap-x-4 gap-y-1">
+        <div className="mt-2 flex flex-wrap items-baseline gap-x-4 gap-y-1">
           <span
             className="text-brass"
             style={{
@@ -107,7 +116,7 @@ export function ActOne({ opacity }: ActProps) {
           <Stat
             label="Red zones"
             value={String(totals.redZones)}
-            note="CUSUM breach"
+            note="Spiking vs own history"
             alert={totals.redZones > 0}
           />
         </dl>

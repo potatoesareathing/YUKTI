@@ -160,7 +160,7 @@ function build(): GraphData {
         meta: {
           Reference: docket('PER', personSerial),
           Priors: randInt(r, 0, 11),
-          'MO cluster': g % 6,
+          'Method group': g % 6,
         },
       })
       personSerial++

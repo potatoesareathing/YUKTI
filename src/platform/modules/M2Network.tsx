@@ -123,7 +123,7 @@ export function M2Network({ ready }: { ready: boolean }) {
   return (
     <div className="grid h-full grid-cols-1 gap-3 p-3 lg:grid-cols-[280px_1fr_320px]">
       <div className="pointer-events-auto hidden min-h-0 flex-col gap-3 overflow-y-auto pr-1 lg:flex">
-        <Panel title="Find an entity" reference="Most connected" ticked className="shrink-0">
+        <Panel title="Start here" reference="Most connected" ticked className="shrink-0">
           <div className="border-b border-rule px-3 py-2">
             <p className="text-[0.74rem] leading-relaxed text-khaki-dim">
               Click a name, or any node in the view — the camera flies to it and its record opens on
@@ -292,7 +292,12 @@ export function M2Network({ ready }: { ready: boolean }) {
           >
             <div className="p-3">
               <div className="mb-3 grid grid-cols-2 gap-3">
-                <Stat label="PageRank" value={pct(selected.centrality, 0)} tone="brass" />
+                <Stat
+                  label="How connected"
+                  value={pct(selected.centrality, 0)}
+                  tone="brass"
+                  sub="PageRank"
+                />
                 <Stat label="Direct links" value={String(selected.degree)} />
               </div>
 
@@ -348,8 +353,9 @@ export function M2Network({ ready }: { ready: boolean }) {
               </ul>
 
               <DecisionSupportNote>
-                Centrality and community membership are analytical signals. They are not evidence of
-                an offence, and require corroboration before any investigative action.
+                How connected someone is, and which group they fall into, are analytical signals.
+                Neither is evidence of an offence, and both require corroboration before any
+                investigative action.
               </DecisionSupportNote>
             </div>
           </Panel>
@@ -363,8 +369,8 @@ export function M2Network({ ready }: { ready: boolean }) {
                     style={{ width: 10, height: 10, background: PALETTE.brass }}
                   />
                 }
-                label="Node size = how connected"
-                note="Link count and PageRank together"
+                label="Bigger node = better connected"
+                note="Links held, weighted by PageRank"
               />
               <LegendRow
                 swatch={
@@ -392,8 +398,8 @@ export function M2Network({ ready }: { ready: boolean }) {
                 swatch={
                   <span className="inline-block h-[2px] w-4" style={{ background: PALETTE.brass }} />
                 }
-                label="Brass line = predicted, not recorded"
-                note="GraphSAGE suggestion — a hypothesis to check"
+                label="Brass line = suggested, not recorded"
+                note="A lead to check, not an association on file"
               />
               <LegendRow
                 swatch={

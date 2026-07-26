@@ -156,7 +156,7 @@ export function M1Geospatial({ ready, onPick }: Props) {
                 ▲
               </span>
               <span className="label" style={{ fontSize: 9 }}>
-                Red zone — CUSUM breach
+                Red zone — spiking vs its own history
               </span>
             </div>
           </div>
@@ -192,8 +192,8 @@ export function M1Geospatial({ ready, onPick }: Props) {
                 <Field name="Police stations">{detail.stations}</Field>
                 <Field name="Urban">{detail.urbanPct}%</Field>
                 <Field name="Literacy">{detail.literacyPct}%</Field>
-                <Field name="Clearance">{detail.clearancePct}%</Field>
-                <Field name="Period change">
+                <Field name="Cases cleared">{detail.clearancePct}%</Field>
+                <Field name="Change vs last period">
                   <span style={{ color: detail.trend > 0 ? PALETTE.redzone : PALETTE.bhuvan }}>
                     {delta(detail.trend)}
                   </span>
@@ -223,7 +223,7 @@ export function M1Geospatial({ ready, onPick }: Props) {
                 label="Red zones"
                 value={String(totals.redZones)}
                 tone={totals.redZones ? 'alert' : 'default'}
-                sub="CUSUM breach"
+                sub="Spiking vs their own history"
               />
             </div>
             <div className="border-t border-rule px-3 py-2.5">
