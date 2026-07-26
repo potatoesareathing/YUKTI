@@ -25,7 +25,6 @@ export function M2Network({ ready }: { ready: boolean }) {
   const setOrigin = useYukti((s) => s.setEgoOrigin)
   const trail = useYukti((s) => s.trail)
   const trailBack = useYukti((s) => s.trailBack)
-  const walkTo = useYukti((s) => s.walkTo)
   const pathTarget = useYukti((s) => s.pathTarget)
   const setPathTarget = useYukti((s) => s.setPathTarget)
   const playback = useYukti((s) => s.playback)
@@ -90,11 +89,11 @@ export function M2Network({ ready }: { ready: boolean }) {
     <div className="grid h-full grid-cols-1 gap-3 p-3 lg:grid-cols-[272px_1fr_312px]">
       {/* Left — where to start, and what to connect */}
       <div className="pointer-events-auto hidden min-h-0 flex-col gap-3 lg:flex">
-        <Panel title="Start from" reference="Origin" ticked>
+        <Panel title="Jump to" reference="Highest centrality" ticked>
           <div className="border-b border-rule px-3 py-2">
             <p className="text-[0.74rem] leading-relaxed text-khaki-dim">
-              One entity at a time, with everything one step away around it. Double-click a
-              satellite to bring it into focus — the ring turns and carries it in.
+              The whole entity graph. Hover any node to spotlight it and its direct links; click to
+              open its record. Drag to orbit, scroll to zoom.
             </p>
           </div>
           <ul className="divide-y divide-rule/50">
@@ -205,8 +204,9 @@ export function M2Network({ ready }: { ready: boolean }) {
               </>
             ) : (
               <p className="text-[0.78rem] leading-relaxed text-khaki-dim">
-                Click a satellite, then <span className="text-khaki">Trace connection</span> to find
-                the shortest chain from {rootNode.label} — and walk it one hop at a time.
+                Click a node, set it as the path origin, then click a second node and{' '}
+                <span className="text-khaki">Trace connection</span> to light the chain between
+                them.
               </p>
             )}
           </div>
@@ -329,11 +329,11 @@ export function M2Network({ ready }: { ready: boolean }) {
 
               <div className="flex flex-col gap-2">
                 <button
-                  onClick={() => walkTo(inspected.id)}
+                  onClick={() => setOrigin(inspected.id)}
                   disabled={inspected.id === origin}
                   className="label w-full border border-rule px-3 py-2 transition-colors hover:border-brass hover:text-brass disabled:opacity-40"
                 >
-                  Bring into focus
+                  Set as path origin
                 </button>
                 <button
                   onClick={() => setPathTarget(inspected.id)}
@@ -360,29 +360,44 @@ export function M2Network({ ready }: { ready: boolean }) {
                 swatch={
                   <span
                     className="inline-block rounded-full"
-                    style={{ width: 10, height: 10, background: PALETTE.brassLit }}
+                    style={{ width: 10, height: 10, background: PALETTE.brass }}
                   />
                 }
-                label="Centre = the entity in focus"
-                note="Everything around it is one step away"
+                label="Node size = how connected"
+                note="Degree and PageRank together"
               />
               <LegendRow
                 swatch={
-                  <span className="inline-block h-[2px] w-4" style={{ background: PALETTE.brass }} />
+                  <span className="inline-flex gap-[3px]">
+                    {[KIND_COLOR.Person, KIND_COLOR.Incident, KIND_COLOR.Location].map((c) => (
+                      <span
+                        key={c}
+                        className="inline-block rounded-full"
+                        style={{ width: 7, height: 7, background: c }}
+                      />
+                    ))}
+                  </span>
                 }
-                label="Spoke = a direct relationship"
-                note="Shorter spoke means a stronger tie"
+                label="Colour = entity kind"
+                note="Person · Incident · Location · Vehicle · Organisation"
               />
               <LegendRow
                 swatch={
-                  <span className="inline-block h-[2px] w-4" style={{ background: PALETTE.bhuvan }} />
+                  <span className="inline-block h-[2px] w-4" style={{ background: PALETTE.brassLit }} />
                 }
-                label="Outer arc = they know each other"
-                note="Two of their contacts, also linked"
+                label="Hover spotlights a node"
+                note="Its links light; everything else recedes"
+              />
+              <LegendRow
+                swatch={
+                  <span className="inline-block h-[2px] w-4" style={{ background: PALETTE.redzone }} />
+                }
+                label="Red chain = traced path"
+                note="Shortest route between two entities"
               />
               <p className="mt-1 border-t border-rule pt-2 text-[0.74rem] leading-relaxed text-khaki-dim">
-                Click a satellite to inspect it. Double-click to bring it into focus — the ring turns
-                and it moves to the centre. The trail below records the route.
+                Drag to orbit, scroll to zoom. The layout is a live force simulation — it keeps
+                settling rather than freezing.
               </p>
             </div>
           </Panel>

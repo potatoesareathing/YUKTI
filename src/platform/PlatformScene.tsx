@@ -6,10 +6,9 @@ import { DistrictLabels } from '@/three/DistrictLabels'
 import { BasePlate, Graticule, InstrumentFrame as SceneFrame } from '@/three/Groundwork'
 import { HotspotLayer } from '@/three/HotspotLayer'
 import { IncidentField } from '@/three/IncidentField'
-import { OrbitFocus } from '@/three/OrbitFocus'
+import { GraphView } from '@/three/GraphView'
 import { Rig } from '@/three/Scene'
 import { sceneClock } from '@/three/clock'
-import { suggestedOrigins } from '@/data/graphpaths'
 import type { DistrictFeature } from '@/lib/geo'
 import type { Incident } from '@/data/types'
 import { useYukti, prefersReducedMotion } from '@/store/useYukti'
@@ -91,21 +90,15 @@ export function MapScene({ features, incidents }: MapSceneProps) {
 
 /* ── MOD-02: the ego dial ──────────────────────────────────────────────────── */
 
+/**
+ * MOD-02. No scripted camera here — the analyst drives it with orbit controls,
+ * the way a graph view is expected to behave.
+ */
 export function DialScene() {
-  const origin = useYukti((s) => s.egoOrigin)
-  const walkTo = useYukti((s) => s.walkTo)
-
-  // Fall back to the best-connected person so the canvas is never empty, even
-  // if the module's own effect has not run yet.
-  const focusId = origin ?? suggestedOrigins(1)[0]?.id ?? null
-  if (!focusId) return null
-
   return (
     <>
       <Rig />
-      <CameraRig station={STATIONS.dial} speed={1.6} userCanInterrupt />
-      <SceneFrame />
-      <OrbitFocus focusId={focusId} onFocus={walkTo} />
+      <GraphView />
     </>
   )
 }
