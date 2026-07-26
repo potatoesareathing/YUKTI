@@ -1,4 +1,4 @@
-import { loadPlatformData, stateTotals } from '@/data/api'
+import { getDataSource, loadPlatformData, stateTotals } from '@/data/api'
 import { useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { Scene } from '@/three/Scene'
@@ -37,9 +37,11 @@ export function Platform() {
   const selectDistrict = useYukti((s) => s.selectDistrict)
   const totals = useMemo(() => stateTotals(), [dataEpoch])
 
+  const [source, setSource] = useState<'api' | 'seed'>('seed')
+
   useEffect(() => {
     resetSceneClock(1)
-    void loadPlatformData().then(() => setDataEpoch((n) => n + 1))
+    void loadPlatformData().then(() => setSource(getDataSource())).then(() => setDataEpoch((n) => n + 1))
   }, [])
 
   // Keyboard access to the modules: 1–6 jump between them, matching the
@@ -92,7 +94,7 @@ export function Platform() {
       <InstrumentFrame
         compact
         reference={`${meta.id} · ${meta.short.toUpperCase()}`}
-        status={`${compact(totals.incidents)} RECORDS · SYNTHETIC`}
+        status={`${compact(totals.incidents)} RECORDS · ${source === 'api' ? 'LIVE' : 'SYNTHETIC'}`}
       />
 
       <EvidenceDrawer />

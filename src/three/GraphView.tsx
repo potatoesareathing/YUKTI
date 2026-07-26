@@ -74,7 +74,12 @@ interface Placed {
 }
 
 /** Induced subgraph: centrality core + any focus ids and their one-hop neighbours. */
-function pickViewGraph(full: GraphData, focusIds: string[], limit = VIEW_NODE_LIMIT): GraphData {
+function pickViewGraph(
+  full: GraphData,
+  focusIds: string[],
+  district: string | null = null,
+  limit = VIEW_NODE_LIMIT,
+): GraphData {
   if (full.nodes.length === 0 || full.nodes.length <= limit) return full
 
   const byId = new Map(full.nodes.map((n) => [n.id, n]))
@@ -89,6 +94,25 @@ function pickViewGraph(full: GraphData, focusIds: string[], limit = VIEW_NODE_LI
     }
   }
 
+  /*
+   * A district filter has to reach the core selection, not just the shading.
+   *
+   * The core is otherwise chosen on centrality alone, so a district whose
+   * entities are all mid-ranked contributes nothing to it — and then the filter
+   * dims every node that IS drawn. The analyst arrives from the map and finds an
+   * empty graph, which reads as a broken view rather than a narrowed one. Seed
+   * the core with that district's own best-connected nodes first.
+   */
+  if (district) {
+    const local = full.nodes
+      .filter((n) => n.district === district)
+      .sort((a, b) => b.centrality - a.centrality || b.degree - a.degree)
+    for (const n of local) {
+      if (keep.size >= limit) break
+      keep.add(n.id)
+    }
+  }
+
   const ranked = [...full.nodes].sort(
     (a, b) => b.centrality - a.centrality || b.degree - a.degree,
   )
@@ -98,7 +122,14 @@ function pickViewGraph(full: GraphData, focusIds: string[], limit = VIEW_NODE_LI
   }
 
   if (keep.size > limit) {
-    const pinned = new Set(focus)
+    // Focus nodes and the filtered district survive the trim — they are the
+    // reason the view is scoped the way it is.
+    const pinned = new Set([
+      ...focus,
+      ...(district
+        ? full.nodes.filter((n) => n.district === district).map((n) => n.id)
+        : []),
+    ])
     const trim = [...keep]
       .filter((id) => !pinned.has(id))
       .sort((a, b) => (byId.get(a)?.centrality ?? 0) - (byId.get(b)?.centrality ?? 0))
@@ -150,8 +181,8 @@ export function GraphView({ revision = 0 }: { revision?: number }) {
 
   // `revision` bumps when bootstrap hydrates so we never keep an empty mount snapshot.
   const graph = useMemo(
-    () => pickViewGraph(getNetwork(), focusIds),
-    [revision, focusIds],
+    () => pickViewGraph(getNetwork(), focusIds, districtFilter),
+    [revision, focusIds, districtFilter],
   )
 
   /* The simulation, rebuilt when the visible subgraph changes. */

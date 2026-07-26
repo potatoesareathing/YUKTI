@@ -22,7 +22,24 @@ import type {
   RiskScore,
   TrendSeries,
 } from './types'
+import { riskBand } from '@/lib/palette'
+import { shortDate } from '@/lib/format'
+import { seeded } from '@/lib/rng'
 import { CENSUS_2011, KARNATAKA_STATIONS } from './census'
+import { getDistrictMetrics as seedDistricts } from './districts'
+import { getIncidents as seedIncidents } from './incidents'
+import { getStations as seedStations } from './stations'
+import { getNetwork as seedNetwork, getCommunities as seedCommunities } from './network'
+import { getModelCards as seedModels } from './models'
+import { getOffenderProfiles as seedOffenders } from './offenders'
+import { getDistrictFlows as seedFlows } from './flows'
+import {
+  getActiveAlerts as seedAlerts,
+  getCategorySeries as seedCategorySeries,
+  getDistrictSeries as seedDistrictSeries,
+} from './timeseries'
+import { NOW as SEED_NOW, PERIOD_DAYS as SEED_PERIOD_DAYS } from './districts'
+import { CRIME_CATEGORIES } from './types'
 import type { StationMetrics } from './stations'
 import type { OffenderProfile } from './offenders'
 import type { FlowAggregate } from './flows'
@@ -151,13 +168,154 @@ function hydrate(b: Bootstrap) {
   adjacency = null
 }
 
+/**
+ * Whether the caches are backed by the API or by the bundled seed.
+ *
+ * The UI reads this to label the dataset honestly — a demo running on seeded
+ * data must not present itself as live.
+ */
+export type DataSource = 'api' | 'seed'
+let source: DataSource = 'seed'
+export const getDataSource = (): DataSource => source
+
+/**
+ * Build the bootstrap payload locally from the bundled generators.
+ *
+ * This is the fallback when the API is unreachable, and it is not a nicety: the
+ * frontend is deployed as a static bundle and is demonstrated on machines where
+ * the backend is not running. Without it, an unreachable API takes down the
+ * landing page and every module with a "Failed to fetch" card — the whole
+ * product becomes a blank screen because one service is down.
+ */
+async function seedBootstrap(): Promise<Bootstrap> {
+  const districts = seedDistricts()
+  const [incidents, stations] = await Promise.all([seedIncidents(), seedStations()])
+
+  const categorySeries: Bootstrap['categorySeries'] = {}
+  for (const c of CRIME_CATEGORIES) categorySeries[c] = seedCategorySeries(c)
+
+  const districtSeries: Bootstrap['districtSeries'] = {}
+  for (const d of districts) {
+    for (const c of CRIME_CATEGORIES) {
+      districtSeries[`${d.name}|${c}`] = seedDistrictSeries(d.name, c)
+    }
+  }
+
+  return {
+    districts,
+    stateTotals: buildStateTotals(districts),
+    incidents,
+    stations,
+    network: seedNetwork(),
+    communities: seedCommunities(),
+    models: seedModels(),
+    offenders: seedOffenders(),
+    flows: seedFlows(2),
+    alerts: seedAlerts(12),
+    riskScores: buildSeedRiskScores(districts, incidents),
+    anomalies: buildSeedAnomalies(incidents),
+    categorySeries,
+    districtSeries,
+    now: SEED_NOW,
+    periodDays: SEED_PERIOD_DAYS,
+  } as Bootstrap
+}
+
+/**
+ * Seed risk scores.
+ *
+ * The drivers are read back out of the same four terms `districts.ts` sums to
+ * produce the score, so what is displayed is the actual arithmetic rather than a
+ * plausible-looking companion to it. A real deployment substitutes SHAP values
+ * from the gradient-boosted model; the display contract does not change.
+ */
+function buildSeedRiskScores(districts: DistrictMetrics[], incidents: Incident[]): RiskScore[] {
+  return districts
+    .map((d) => {
+      const rateTerm = Math.min(1, (d.rate - 95) / 520) * 0.42
+      const urbanTerm = (d.urbanPct / 100) * 0.24
+      const trendTerm = Math.min(1, Math.max(0, (d.trend + 0.12) / 0.34)) * 0.26
+      const litTerm = (1 - d.literacyPct / 100) * 0.18
+
+      const recent = incidents
+        .filter((i) => i.district === d.name)
+        .sort((a, b) => b.at - a.at)
+        .slice(0, 4)
+
+      return {
+        district: d.name,
+        score: d.riskNorm,
+        band: riskBand(d.riskNorm),
+        drivers: [
+          { feature: `Incident rate — ${d.rate} per 100k`, contribution: rateTerm },
+          { feature: `Period-on-period change — ${(d.trend * 100).toFixed(1)}%`, contribution: trendTerm },
+          { feature: `Urbanisation — ${d.urbanPct.toFixed(1)}%`, contribution: urbanTerm },
+          { feature: `Literacy (inverse) — ${d.literacyPct.toFixed(1)}%`, contribution: litTerm },
+        ].sort((a, b) => b.contribution - a.contribution),
+        evidence: [
+          ...recent.map((i) => ({
+            kind: 'incident' as const,
+            ref: i.id,
+            label: i.docket,
+            detail: `${i.category} · ${i.station} · ${shortDate(new Date(i.at))}`,
+          })),
+          {
+            kind: 'feature' as const,
+            ref: `${d.name}:census`,
+            label: 'Census 2011 indicators',
+            detail: `Urban ${d.urbanPct}% · Literacy ${d.literacyPct}% · Population ${d.population.toLocaleString('en-IN')}`,
+          },
+        ],
+        horizonDays: 30,
+      }
+    })
+    .sort((a, b) => b.score - a.score)
+}
+
+function buildSeedAnomalies(incidents: Incident[], limit = 24): AnomalyFlag[] {
+  return incidents
+    .filter((i) => i.anomaly)
+    .sort((a, b) => b.anomalyScore - a.anomalyScore)
+    .slice(0, limit)
+    .map((i) => {
+      const r = seeded(`anomaly:${i.id}`)
+      const reasons = [
+        `Offence window ${i.mo.timing} is atypical for ${i.category} in this jurisdiction`,
+        `Entry method "${i.mo.entry}" rare for ${i.mo.target} in ${i.district}`,
+        `Target profile deviates from the station's recorded pattern`,
+        `Combination of tools and timing not seen in the preceding 90 days`,
+      ]
+      return {
+        id: `ANM-${i.id}`,
+        incidentId: i.id,
+        district: i.district,
+        score: i.anomalyScore,
+        reason: reasons[Math.floor(r() * reasons.length)],
+        at: i.at,
+        evidence: [
+          { kind: 'incident' as const, ref: i.id, label: i.docket, detail: i.narrative },
+          {
+            kind: 'feature' as const,
+            ref: `${i.id}:mo`,
+            label: 'MO feature vector',
+            detail: `${i.mo.entry} · ${i.mo.target} · ${i.mo.timing} · ${i.mo.tools}`,
+          },
+        ],
+      }
+    })
+}
+
 export async function loadPlatformData(): Promise<void> {
   if (!ready) {
     ready = apiGet<Bootstrap>('/api/bootstrap')
-      .then(hydrate)
-      .catch((err) => {
-        ready = null
-        throw err
+      .then((b) => {
+        source = 'api'
+        hydrate(b)
+      })
+      .catch(async () => {
+        // Degrade to the bundled seed rather than taking the whole app down.
+        source = 'seed'
+        hydrate(await seedBootstrap())
       })
   }
   return ready

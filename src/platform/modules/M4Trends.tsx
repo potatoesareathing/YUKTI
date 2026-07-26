@@ -1,6 +1,6 @@
 import { getActiveAlerts, getCategorySeries, getDistrictMetrics, getDistrictSeries } from '@/data/api'
 import { useMemo, useState } from 'react'
-import { Panel, Stat, Tag, DecisionSupportNote } from '@/ui/primitives'
+import { Panel, Stat, Tag, DecisionSupportNote, Empty } from '@/ui/primitives'
 import { StlChart, Sparkline, RankedBars } from '@/ui/charts'
 import { useEvidence } from '@/ui/EvidenceDrawer'
 import { useYukti } from '@/store/useYukti'
@@ -32,11 +32,26 @@ export function M4Trends() {
   const alerts = useMemo(() => getActiveAlerts(12), [])
   const districts = useMemo(() => getDistrictMetrics(), [])
 
+  const redZones = useMemo(() => districts.filter((d) => d.redZone), [districts])
+
+  /*
+   * The series can legitimately be empty: the API returns an empty placeholder
+   * until `loadPlatformData()` has hydrated the cache, and this module renders
+   * before that resolves. Indexing points[] unguarded threw during that window
+   * and took the whole module down to a blank screen — with nothing in the
+   * console, because the throw happened during render.
+   */
+  if (!series.points.length) {
+    return (
+      <div className="p-6">
+        <Empty>Loading trend series.</Empty>
+      </div>
+    )
+  }
+
   const latest = series.points[series.points.length - 1]
   const prior = series.points[series.points.length - 14] ?? series.points[0]
-  const change = prior.value ? (latest.value - prior.value) / prior.value : 0
-
-  const redZones = useMemo(() => districts.filter((d) => d.redZone), [districts])
+  const change = prior?.value ? (latest.value - prior.value) / prior.value : 0
 
   return (
     <div className="mx-auto grid max-w-[1500px] grid-cols-1 gap-3 p-3 xl:grid-cols-[minmax(0,1fr)_340px]">

@@ -4,6 +4,7 @@ import { loadPlatformData } from '@/data/api'
 import { Scene } from '@/three/Scene'
 import { resetSceneClock } from '@/three/clock'
 import { useGeo } from '@/three/useGeo'
+import { getDataSource } from '@/data/api'
 import { InstrumentFrame } from '@/ui/InstrumentFrame'
 import { useYukti, prefersReducedMotion } from '@/store/useYukti'
 import { ACTS, LandingScene } from './LandingScene'
@@ -92,7 +93,13 @@ export function Landing() {
               ? 'SEC 7.1 · SPATIOTEMPORAL'
               : 'YUKTI · STATE OVERVIEW'
         }
-        status={ready ? 'SYNTHETIC DATASET · DEMONSTRATION' : 'LOADING BOUNDARIES'}
+        status={
+          ready
+            ? getDataSource() === 'api'
+              ? 'LIVE DATASET'
+              : 'SYNTHETIC DATASET · DEMONSTRATION'
+            : 'LOADING BOUNDARIES'
+        }
       />
 
       <TopBar />
@@ -211,8 +218,20 @@ function BoundaryError({ message }: { message: string }) {
         <div className="label-brass mb-3">Boundary data unavailable</div>
         <p className="mb-4 text-[0.94rem] leading-relaxed text-khaki/80">{message}</p>
         <p className="text-[0.84rem] leading-relaxed text-khaki-dim">
-          The map needs <span className="tnum text-khaki">/data/karnataka-districts.geo.json</span>.
-          Check that the file is served, then reload.
+          {/^Failed to fetch/i.test(message) ? (
+            <>
+              A data source could not be reached. The platform falls back to its bundled dataset
+              when the API is unavailable, so this usually means{' '}
+              <span className="tnum text-khaki">/data/karnataka-districts.geo.json</span> is missing
+              from the build.
+            </>
+          ) : (
+            <>
+              The map needs{' '}
+              <span className="tnum text-khaki">/data/karnataka-districts.geo.json</span>. Check that
+              the file is served, then reload.
+            </>
+          )}
         </p>
         <button
           onClick={() => window.location.reload()}
