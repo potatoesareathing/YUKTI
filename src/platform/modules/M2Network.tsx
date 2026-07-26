@@ -43,12 +43,18 @@ export function M2Network({ ready }: { ready: boolean }) {
   useEffect(() => {
     if (origin || !origins.length) return
     setOrigin(origins[0].id)
-    const n = Number(new URLSearchParams(window.location.search).get('path'))
+    const params = new URLSearchParams(window.location.search)
+    const n = Number(params.get('path'))
     if (Number.isInteger(n) && origins[n]) {
       const target = origins[n].id
       queueMicrotask(() => setPathTarget(target))
     }
-  }, [origin, origins, setOrigin, setPathTarget])
+    const pick = Number(params.get('node'))
+    if (Number.isInteger(pick) && origins[pick]) {
+      const id = origins[pick].id
+      queueMicrotask(() => selectNode(id))
+    }
+  }, [origin, origins, setOrigin, setPathTarget, selectNode])
 
   const view = useMemo(() => (origin ? getFocusView(origin) : null), [origin])
 

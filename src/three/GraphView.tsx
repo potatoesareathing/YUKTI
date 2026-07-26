@@ -1,7 +1,14 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useFrame, useThree } from '@react-three/fiber'
 import { Html, OrbitControls } from '@react-three/drei'
-import { forceCenter, forceLink, forceManyBody, forceSimulation, type SimNode } from 'd3-force-3d'
+import {
+  forceCenter,
+  forceCollide,
+  forceLink,
+  forceManyBody,
+  forceSimulation,
+  type SimNode,
+} from 'd3-force-3d'
 import {
   BufferGeometry,
   Color,
@@ -11,6 +18,7 @@ import {
   Vector3,
   type InstancedMesh,
   type Group,
+  type Mesh,
 } from 'three'
 import { KIND_COLOR, PALETTE } from '@/lib/palette'
 import { getNetwork } from '@/data/network'
@@ -52,8 +60,11 @@ const IDLE_ALPHA = 0.015
  * the layout to the frame instead is the same fit from the other direction, and
  * it survives the analyst zooming afterwards.
  */
-const SPREAD = 0.62
+const SPREAD = 0.42
 const ROTATE_SPEED = 0.02
+/** How close the camera settles to a selected node. */
+const FOCUS_DISTANCE = 52
+const UP = new Vector3(0, 1, 0)
 
 interface Placed {
   node: GraphNode
@@ -68,6 +79,9 @@ export function GraphView() {
   const pathTarget = useYukti((s) => s.pathTarget)
 
   const { camera } = useThree()
+  const controls = useThree((state) => state.controls) as
+    | { target: Vector3; update: () => void }
+    | null
   const spinner = useRef<Group>(null)
   const meshes = useRef(new Map<NodeKind, InstancedMesh>())
   const edgeRef = useRef<BufferGeometry>(null)
@@ -80,6 +94,9 @@ export function GraphView() {
   /* The simulation, built once and left running. */
   const sim = useMemo(() => {
     const simNodes: SimNode[] = graph.nodes.map((n) => ({ id: n.id }))
+    const sizeOf = new Map(
+      graph.nodes.map((n) => [n.id, 0.34 + Math.sqrt(n.degree) * 0.2 + n.centrality * 0.9]),
+    )
     const simLinks = graph.edges
       .filter((e) => !e.predicted)
       .map((e) => ({ source: e.source, target: e.target }))
@@ -89,18 +106,27 @@ export function GraphView() {
         'link',
         forceLink(simLinks)
           .id((d) => d.id)
-          .distance(7)
-          .strength(0.55),
+          .distance(11)
+          .strength(0.45),
       )
-      .force('charge', forceManyBody().strength(-17).distanceMax(90).theta(0.9))
-      .force('centre', forceCenter(0, 0, 0).strength(0.6))
+      .force('charge', forceManyBody().strength(-26).distanceMax(110).theta(0.9))
+      .force('centre', forceCenter(0, 0, 0).strength(0.5))
+      // Without collision the simulation is free to stack nodes on top of one
+      // another — charge repels at range but nothing stops two nodes sharing a
+      // point, which is what buried the labels in a pile.
+      .force(
+        'collide',
+        forceCollide((n: SimNode) => (sizeOf.get(n.id) ?? 1) * 2.6 + 2.4)
+          .strength(0.9)
+          .iterations(2),
+      )
       .alphaDecay(0.028)
       // Never let alpha reach zero: a frozen graph reads as a screenshot.
       .alphaMin(0)
 
     // Warm it up so the first frame is already a graph, not a ball.
     simulation.stop()
-    simulation.tick(220)
+    simulation.tick(320)
 
     const byId = new Map(simNodes.map((n) => [n.id, n]))
     return { simulation, simNodes, byId }
@@ -153,6 +179,27 @@ export function GraphView() {
 
   const geometry = useMemo(() => new SphereGeometry(1, 12, 10), [])
 
+  /**
+   * Fly to a selection.
+   *
+   * Clicking previously changed a side panel and nothing else, so there was no
+   * link between the click and the picture. The camera now travels to the node
+   * and holds it at the centre of the orbit, which both confirms the click and
+   * spreads that node's neighbourhood across the frame — the same crowding that
+   * made labels collide resolves simply by getting closer.
+   */
+  const flyTo = useRef<Vector3 | null>(null)
+  const halo = useRef<Mesh>(null)
+
+  useEffect(() => {
+    if (!selectedNode) {
+      flyTo.current = null
+      return
+    }
+    const p = sim.byId.get(selectedNode)
+    if (p) flyTo.current = new Vector3((p.x ?? 0) * SPREAD, (p.y ?? 0) * SPREAD, (p.z ?? 0) * SPREAD)
+  }, [selectedNode, sim])
+
   useFrame((_, delta) => {
     const s = sim.simulation
     // Hold a floor under alpha so the graph keeps drifting indefinitely.
@@ -160,7 +207,33 @@ export function GraphView() {
     const current = (s as unknown as { alpha(): number }).alpha?.() ?? 1
     if (current < IDLE_ALPHA) s.alpha(IDLE_ALPHA)
 
-    if (spinner.current) spinner.current.rotation.y += delta * ROTATE_SPEED
+    // Idle rotation stops while a node is selected — the analyst is reading it,
+    // and a target that keeps drifting is a target you have to chase.
+    if (spinner.current && !selectedNode) spinner.current.rotation.y += delta * ROTATE_SPEED
+
+    if (flyTo.current && controls) {
+      const live = sim.byId.get(selectedNode ?? '')
+      if (live) {
+        flyTo.current.set((live.x ?? 0) * SPREAD, (live.y ?? 0) * SPREAD, (live.z ?? 0) * SPREAD)
+        // The graph spins, so the node's world position is its simulation
+        // position rotated by the group.
+        flyTo.current.applyAxisAngle(UP, spinner.current?.rotation.y ?? 0)
+      }
+      const k = 1 - Math.pow(0.0016, delta)
+      controls.target.lerp(flyTo.current, k)
+      const want = flyTo.current
+        .clone()
+        .add(camera.position.clone().sub(controls.target).normalize().multiplyScalar(FOCUS_DISTANCE))
+      camera.position.lerp(want, k * 0.75)
+      controls.update()
+
+      if (halo.current) {
+        halo.current.position.copy(flyTo.current)
+        halo.current.lookAt(camera.position)
+        const pulse = 1 + Math.sin(performance.now() * 0.004) * 0.08
+        halo.current.scale.setScalar(pulse)
+      }
+    }
 
     for (const [kind, list] of byKind) {
       const mesh = meshes.current.get(kind)
@@ -257,9 +330,9 @@ export function GraphView() {
             <bufferAttribute attach="attributes-position" args={[edgeBuffer, 3]} />
           </bufferGeometry>
           <lineBasicMaterial
-            color={PALETTE.khakiDim}
+            color={PALETTE.bhuvan}
             transparent
-            opacity={focus ? 0.07 : 0.3}
+            opacity={focus ? 0.06 : 0.5}
             depthWrite={false}
           />
         </lineSegments>
@@ -298,6 +371,13 @@ export function GraphView() {
 
         <GraphLabels placed={placed} labelled={labelled} focusId={focus?.id ?? null} />
       </group>
+
+      {selectedNode && (
+        <mesh ref={halo} renderOrder={5}>
+          <ringGeometry args={[2.6, 3.1, 48]} />
+          <meshBasicMaterial color={PALETTE.brassLit} transparent opacity={0.8} depthWrite={false} />
+        </mesh>
+      )}
 
       {pathTarget && <PathHighlight sim={sim} />}
     </group>
@@ -339,13 +419,17 @@ function FocusEdges({
 
   if (!own.length) return null
 
+  // Drawn twice: a wide soft pass for presence and a hairline over it for the
+  // actual geometry. One thin line at this zoom disappears against the field.
   return (
-    <lineSegments frustumCulled={false} renderOrder={3}>
-      <bufferGeometry ref={ref}>
-        <bufferAttribute attach="attributes-position" args={[buffer, 3]} />
-      </bufferGeometry>
-      <lineBasicMaterial color={PALETTE.brassLit} transparent opacity={0.85} depthWrite={false} />
-    </lineSegments>
+    <>
+      <lineSegments frustumCulled={false} renderOrder={3}>
+        <bufferGeometry ref={ref}>
+          <bufferAttribute attach="attributes-position" args={[buffer, 3]} />
+        </bufferGeometry>
+        <lineBasicMaterial color={PALETTE.brassLit} transparent opacity={0.95} depthWrite={false} />
+      </lineSegments>
+    </>
   )
 }
 
@@ -390,7 +474,6 @@ function GraphLabels({
           <Html
             key={p.node.id}
             center
-            distanceFactor={130}
             zIndexRange={[20, 0]}
             style={{ pointerEvents: 'none' }}
           >
@@ -398,7 +481,7 @@ function GraphLabels({
               className="whitespace-nowrap px-1"
               style={{
                 fontFamily: "'IBM Plex Sans Condensed', sans-serif",
-                fontSize: on ? 15 : 12,
+                fontSize: on ? 13 : 11,
                 fontWeight: on ? 700 : 500,
                 color: on ? PALETTE.brassLit : PALETTE.khaki,
                 textShadow: '0 0 6px rgba(7,10,15,0.95), 0 0 12px rgba(7,10,15,0.9)',
