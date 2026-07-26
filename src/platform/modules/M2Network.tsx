@@ -1,10 +1,9 @@
 import { useEffect, useMemo } from 'react'
-import { Panel, Stat, Field, Empty, DecisionSupportNote } from '@/ui/primitives'
+import { Panel, Stat, Field, Empty, Tag, DecisionSupportNote } from '@/ui/primitives'
 import { useYukti } from '@/store/useYukti'
 import { useEvidence } from '@/ui/EvidenceDrawer'
 import { getCommunities, getNetwork } from '@/data/network'
-import { commonNeighbours, shortestPath, suggestedOrigins } from '@/data/graphpaths'
-import { getFocusView, edgeLabel } from '@/data/focus'
+import { commonNeighbours, edgeLabel, shortestPath, suggestedOrigins } from '@/data/graphpaths'
 import { KIND_COLOR, PALETTE } from '@/lib/palette'
 import { pct } from '@/lib/format'
 import type { Evidence, GraphNode } from '@/data/types'
@@ -12,76 +11,107 @@ import type { Evidence, GraphNode } from '@/data/types'
 /**
  * MOD-02 — Criminological Network & Link Analysis (§7.2).
  *
- * §7.2 asks for a viewer analysts expand from a starting entity, and names
- * shortest-path and common-neighbour analysis as the means of surfacing indirect
- * links. This module is those three things: an origin to start from, a dial to
- * expand, and a path finder that answers "how are these two connected?".
+ * The module holds exactly two ideas, and keeping them apart is what makes it
+ * readable:
+ *
+ *   SELECTION — the one entity you last clicked. The camera flies to it and the
+ *     right-hand panel is its record. There is only ever one.
+ *   PATH — two explicitly chosen endpoints, From and To. Filling them is a
+ *     deliberate act, so the finder never has to guess which entity you meant.
+ *
+ * An earlier version conflated the two: a panel headed with one name sat
+ * directly above a panel headed with another, with nothing on screen saying how
+ * they related, next to a trail that never changed because nothing updated it.
  */
 
 export function M2Network({ ready }: { ready: boolean }) {
   const selectedNode = useYukti((s) => s.selectedNode)
   const selectNode = useYukti((s) => s.selectNode)
-  const origin = useYukti((s) => s.egoOrigin)
-  const setOrigin = useYukti((s) => s.setEgoOrigin)
-  const trail = useYukti((s) => s.trail)
-  const trailBack = useYukti((s) => s.trailBack)
-  const pathTarget = useYukti((s) => s.pathTarget)
-  const setPathTarget = useYukti((s) => s.setPathTarget)
-  const playback = useYukti((s) => s.playback)
-  const startPlayback = useYukti((s) => s.startPlayback)
-  const stepPlayback = useYukti((s) => s.stepPlayback)
-  const stopPlayback = useYukti((s) => s.stopPlayback)
+  const pathFrom = useYukti((s) => s.pathFrom)
+  const pathTo = useYukti((s) => s.pathTo)
+  const setPathFrom = useYukti((s) => s.setPathFrom)
+  const setPathTo = useYukti((s) => s.setPathTo)
+  const clearPath = useYukti((s) => s.clearPath)
+  const showPredicted = useYukti((s) => s.showPredicted)
+  const toggleLayer = useYukti((s) => s.toggleLayer)
   const openEvidence = useEvidence()
 
   const graph = useMemo(() => getNetwork(), [])
+  const byId = useMemo(() => new Map(graph.nodes.map((n) => [n.id, n])), [graph.nodes])
   const communities = useMemo(() => getCommunities(), [])
   const origins = useMemo(() => suggestedOrigins(8), [])
 
-  // Open on the best-connected person rather than on an empty canvas.
-  // ?path=<n> additionally traces to the n-th ranked origin, so the connection
-  // finder can be linked to directly for a walkthrough.
+  // Deep links for walkthroughs: ?node= selects one, ?path= fills both endpoints.
   useEffect(() => {
-    if (origin || !origins.length) return
-    setOrigin(origins[0].id)
     const params = new URLSearchParams(window.location.search)
-    const n = Number(params.get('path'))
-    if (Number.isInteger(n) && origins[n]) {
-      const target = origins[n].id
-      queueMicrotask(() => setPathTarget(target))
+    // Number(null) is 0, not NaN — reading these without checking for presence
+    // first meant every plain page load silently selected origins[0] and set
+    // both path endpoints to the same entity.
+    const read = (key: string): number | null => {
+      const raw = params.get(key)
+      if (raw === null || raw.trim() === '') return null
+      const n = Number(raw)
+      return Number.isInteger(n) ? n : null
     }
-    const pick = Number(params.get('node'))
-    if (Number.isInteger(pick) && origins[pick]) {
-      const id = origins[pick].id
-      queueMicrotask(() => selectNode(id))
+
+    const node = read('node')
+    if (node !== null && origins[node]) selectNode(origins[node].id)
+
+    const path = read('path')
+    if (path !== null && origins[path] && origins[0] && path !== 0) {
+      setPathFrom(origins[0].id)
+      setPathTo(origins[path].id)
     }
-  }, [origin, origins, setOrigin, setPathTarget, selectNode])
+  }, [origins, selectNode, setPathFrom, setPathTo])
 
-  const view = useMemo(() => (origin ? getFocusView(origin) : null), [origin])
+  const selected = selectedNode ? byId.get(selectedNode) : null
+  const fromNode = pathFrom ? byId.get(pathFrom) : null
+  const toNode = pathTo ? byId.get(pathTo) : null
 
-  /**
-   * Playback advances one hop at a time. Each step is a full orbital transition
-   * in the view, so the interval has to clear it — stepping faster than the
-   * animation just produces a blur nobody can follow.
-   */
-  useEffect(() => {
-    if (!playback) return
-    const id = setTimeout(stepPlayback, 1900)
-    return () => clearTimeout(id)
-  }, [playback, stepPlayback])
   const path = useMemo(
-    () => (origin && pathTarget ? shortestPath(origin, pathTarget) : null),
-    [origin, pathTarget],
+    () => (pathFrom && pathTo ? shortestPath(pathFrom, pathTo) : null),
+    [pathFrom, pathTo],
   )
   const shared = useMemo(
-    () => (origin && pathTarget ? commonNeighbours(origin, pathTarget) : []),
-    [origin, pathTarget],
+    () => (pathFrom && pathTo ? commonNeighbours(pathFrom, pathTo) : []),
+    [pathFrom, pathTo],
   )
 
-  const inspected = selectedNode ? graph.nodes.find((n) => n.id === selectedNode) : null
-  const rootNode = origin ? graph.nodes.find((n) => n.id === origin) : null
-  const byId = useMemo(() => new Map(graph.nodes.map((n) => [n.id, n])), [graph.nodes])
+  /**
+   * One row per connected entity, not per edge. Two people co-accused in three
+   * FIRs share three edges; listing the same name three times reads as duplicate
+   * records in a platform whose premise is entity resolution.
+   */
+  const neighbours = useMemo(() => {
+    if (!selectedNode) return []
+    const merged = new Map<string, { node: GraphNode; kinds: Set<string>; predicted: boolean }>()
 
-  if (!ready || !view || !rootNode) {
+    for (const e of graph.edges) {
+      const other =
+        e.source === selectedNode ? e.target : e.target === selectedNode ? e.source : null
+      if (!other) continue
+      const n = byId.get(other)
+      if (!n) continue
+
+      const row = merged.get(other) ?? { node: n, kinds: new Set<string>(), predicted: true }
+      row.kinds.add(edgeLabel(e.kind))
+      // Only wholly-predicted relationships count as predicted: one recorded
+      // edge is enough to make the association a matter of record.
+      row.predicted = row.predicted && !!e.predicted
+      merged.set(other, row)
+    }
+
+    return [...merged.values()]
+      .map((r) => ({
+        node: r.node,
+        kind: [...r.kinds].join(' · '),
+        ties: r.kinds.size,
+        predicted: r.predicted,
+      }))
+      .sort((a, b) => b.node.centrality - a.node.centrality)
+  }, [selectedNode, graph.edges, byId])
+
+  if (!ready) {
     return (
       <div className="p-6">
         <Empty>Loading the entity graph.</Empty>
@@ -89,31 +119,30 @@ export function M2Network({ ready }: { ready: boolean }) {
     )
   }
 
-  const reach = new Set(view.satellites.map((s) => s.node.district))
+  const predictedCount = graph.edges.filter((e) => e.predicted).length
 
   return (
-    <div className="grid h-full grid-cols-1 gap-3 p-3 lg:grid-cols-[272px_1fr_312px]">
-      {/* Left — where to start, and what to connect */}
-      <div className="pointer-events-auto hidden min-h-0 flex-col gap-3 lg:flex">
-        <Panel title="Jump to" reference="Highest centrality" ticked>
+    <div className="grid h-full grid-cols-1 gap-3 p-3 lg:grid-cols-[280px_1fr_320px]">
+      <div className="pointer-events-auto hidden min-h-0 flex-col gap-3 overflow-y-auto pr-1 lg:flex">
+        <Panel title="Find an entity" reference="Most connected" ticked className="shrink-0">
           <div className="border-b border-rule px-3 py-2">
             <p className="text-[0.74rem] leading-relaxed text-khaki-dim">
-              The whole entity graph. Hover any node to spotlight it and its direct links; click to
-              open its record. Drag to orbit, scroll to zoom.
+              Click a name, or any node in the view — the camera flies to it and its record opens on
+              the right. Drag to orbit, scroll to zoom.
             </p>
           </div>
           <ul className="divide-y divide-rule/50">
             {origins.map((o) => (
               <li key={o.id}>
                 <button
-                  onClick={() => setOrigin(o.id)}
+                  onClick={() => selectNode(o.id)}
                   className="flex w-full items-center gap-2 px-3 py-2 text-left transition-colors hover:bg-brass/[0.06]"
-                  style={{ background: origin === o.id ? 'rgba(201,162,39,0.1)' : undefined }}
+                  style={{ background: selectedNode === o.id ? 'rgba(201,162,39,0.1)' : undefined }}
                 >
                   <span className="min-w-0 flex-1">
                     <span
                       className="block truncate text-[0.8rem]"
-                      style={{ color: origin === o.id ? PALETTE.brassLit : PALETTE.khaki }}
+                      style={{ color: selectedNode === o.id ? PALETTE.brassLit : PALETTE.khaki }}
                     >
                       {o.label}
                     </span>
@@ -135,21 +164,26 @@ export function M2Network({ ready }: { ready: boolean }) {
         <Panel
           title="Connection finder"
           reference="Shortest path"
+          className="shrink-0"
           action={
-            pathTarget ? (
-              <button
-                className="label transition-colors hover:text-brass"
-                onClick={() => setPathTarget(null)}
-              >
+            pathFrom || pathTo ? (
+              <button className="label transition-colors hover:text-brass" onClick={clearPath}>
                 Clear
               </button>
             ) : null
           }
         >
           <div className="p-3">
+            {/* Both slots stay on screen whether filled or not, so it is never
+                ambiguous what the finder is about to compute. */}
+            <div className="mb-3 flex flex-col gap-1.5">
+              <Endpoint slot="From" node={fromNode} onClear={() => setPathFrom(null)} />
+              <Endpoint slot="To" node={toNode} onClear={() => setPathTo(null)} />
+            </div>
+
             {path ? (
               <>
-                <div className="mb-3 flex items-baseline gap-4">
+                <div className="mb-3 flex items-baseline gap-4 border-t border-rule pt-3">
                   <Stat label="Steps apart" value={String(path.hops)} tone="brass" />
                   <Stat
                     label="Relationship"
@@ -168,12 +202,15 @@ export function M2Network({ ready }: { ready: boolean }) {
                         style={{ background: KIND_COLOR[n.kind] }}
                         aria-hidden
                       />
-                      <span className="min-w-0 flex-1 truncate text-[0.78rem] text-khaki">
+                      <button
+                        onClick={() => selectNode(n.id)}
+                        className="min-w-0 flex-1 truncate text-left text-[0.78rem] text-khaki transition-colors hover:text-brass"
+                      >
                         {n.label}
-                      </span>
-                      {i < path.nodes.length - 1 && (
+                      </button>
+                      {i < path.nodes.length - 1 && path.links[i] && (
                         <span className="label shrink-0" style={{ fontSize: 9 }}>
-                          {path.links[i] ? edgeLabel(path.links[i].kind) : ''}
+                          {edgeLabel(path.links[i].kind)}
                         </span>
                       )}
                     </li>
@@ -193,37 +230,29 @@ export function M2Network({ ready }: { ready: boolean }) {
                   </div>
                 )}
 
-                <div className="flex flex-col gap-2">
-                  <button
-                    onClick={() => startPlayback(path.nodes.map((n) => n.id))}
-                    className="label w-full border border-brass/50 bg-brass/[0.08] px-3 py-2 text-brass transition-colors hover:bg-brass/16"
-                  >
-                    ▶ Walk this connection
-                  </button>
-                  <button
-                    onClick={() => openEvidence(pathEvidence(rootNode, path.nodes, shared))}
-                    className="label w-full border border-rule px-3 py-2 transition-colors hover:border-brass hover:text-brass"
-                  >
-                    Show the records on this path
-                  </button>
-                </div>
+                <button
+                  onClick={() => openEvidence(pathEvidence(path.nodes, shared, path.hops))}
+                  className="label w-full border border-brass/50 px-3 py-2 text-brass transition-colors hover:bg-brass/12"
+                >
+                  Show the records on this path
+                </button>
               </>
             ) : (
-              <p className="text-[0.78rem] leading-relaxed text-khaki-dim">
-                Click a node, set it as the path origin, then click a second node and{' '}
-                <span className="text-khaki">Trace connection</span> to light the chain between
-                them.
+              <p className="border-t border-rule pt-3 text-[0.76rem] leading-relaxed text-khaki-dim">
+                {pathFrom && pathTo
+                  ? 'No route between these two in the recorded graph.'
+                  : 'Select an entity, then use Set as From or Set as To on its record. The route lights in red across the graph.'}
               </p>
             )}
           </div>
         </Panel>
 
-        <Panel title="Communities" reference="Louvain" scroll className="min-h-0 flex-1">
+        <Panel title="Communities" reference="Louvain" className="shrink-0">
           <ul className="divide-y divide-rule/50">
             {communities.map((c) => (
               <li key={c.id}>
                 <button
-                  onClick={() => setOrigin(c.topNode.id)}
+                  onClick={() => selectNode(c.topNode.id)}
                   className="flex w-full items-center justify-between gap-2 px-3 py-2 text-left transition-colors hover:bg-brass/[0.06]"
                 >
                   <span className="min-w-0">
@@ -242,71 +271,15 @@ export function M2Network({ ready }: { ready: boolean }) {
         </Panel>
       </div>
 
-      {/* Centre column is the canvas. Only the trail sits over it. */}
-      <div className="pointer-events-none relative flex min-h-0 items-end justify-center pb-2">
-        <nav
-          className="pointer-events-auto plate flex max-w-full items-center gap-1 overflow-x-auto px-2 py-1.5"
-          aria-label="Route walked"
-        >
-          <span className="label shrink-0 pr-1">Trail</span>
-          {trail.map((id, i) => {
-            const n = byId.get(id)
-            if (!n) return null
-            const last = i === trail.length - 1
-            return (
-              <span key={`${id}-${i}`} className="flex shrink-0 items-center gap-1">
-                {i > 0 && (
-                  <span className="text-rule-2" aria-hidden>
-                    ›
-                  </span>
-                )}
-                <button
-                  onClick={() => trailBack(i)}
-                  aria-current={last ? 'true' : undefined}
-                  className="whitespace-nowrap px-1 text-[0.78rem] transition-colors hover:text-brass"
-                  style={{ color: last ? PALETTE.brassLit : PALETTE.khakiDim }}
-                >
-                  {n.label}
-                </button>
-              </span>
-            )
-          })}
-          {playback && (
-            <span className="ml-2 flex shrink-0 items-center gap-2 border-l border-rule pl-2">
-              <span className="label-brass" style={{ fontSize: 9 }}>
-                Playing {playback.index + 1}/{playback.chain.length}
-              </span>
-              <button className="label transition-colors hover:text-brass" onClick={stopPlayback}>
-                Stop
-              </button>
-            </span>
-          )}
-        </nav>
-      </div>
+      {/* The canvas sits here. */}
+      <div aria-hidden />
 
-      {/* Right — the dial's summary, and whatever is inspected */}
       <div className="pointer-events-auto flex min-h-0 flex-col gap-3">
-        <Panel title={rootNode.label} reference="In focus" ticked>
-          <div className="grid grid-cols-2 gap-3 p-3">
-            <Stat label="Direct links" value={String(view.satellites.length)} tone="brass" />
-            <Stat label="Jurisdictions" value={String(reach.size)} tone="cool" />
-            <Stat label="Between them" value={String(view.rim.length)} sub="Rim ties" />
-            <Stat label="PageRank" value={pct(rootNode.centrality, 0)} />
-          </div>
-          {view.hidden > 0 && (
-            <div className="border-t border-rule px-3 py-2">
-              <p className="text-[0.72rem] leading-relaxed text-khaki-dim">
-                {view.hidden} further links are not shown — the ring holds seventeen so every one
-                stays labelled.
-              </p>
-            </div>
-          )}
-        </Panel>
-
-        {inspected ? (
+        {selected ? (
           <Panel
-            title={inspected.label}
-            reference={inspected.kind}
+            title={selected.label}
+            reference={selected.kind}
+            ticked
             scroll
             className="min-h-0 flex-1"
             action={
@@ -320,47 +293,69 @@ export function M2Network({ ready }: { ready: boolean }) {
           >
             <div className="p-3">
               <div className="mb-3 grid grid-cols-2 gap-3">
-                <Stat label="PageRank" value={pct(inspected.centrality, 0)} tone="brass" />
-                <Stat label="Direct links" value={String(inspected.degree)} />
+                <Stat label="PageRank" value={pct(selected.centrality, 0)} tone="brass" />
+                <Stat label="Direct links" value={String(selected.degree)} />
               </div>
 
               <div className="mb-3">
-                <Field name="Jurisdiction">{inspected.district}</Field>
-                {Object.entries(inspected.meta ?? {}).map(([k, v]) => (
+                <Field name="Jurisdiction">{selected.district}</Field>
+                {Object.entries(selected.meta ?? {}).map(([k, v]) => (
                   <Field key={k} name={k}>
                     {String(v)}
                   </Field>
                 ))}
               </div>
 
-              <div className="flex flex-col gap-2">
+              <div className="mb-3 flex gap-2">
                 <button
-                  onClick={() => setOrigin(inspected.id)}
-                  disabled={inspected.id === origin}
-                  className="label w-full border border-rule px-3 py-2 transition-colors hover:border-brass hover:text-brass disabled:opacity-40"
+                  onClick={() => setPathFrom(selected.id)}
+                  disabled={pathFrom === selected.id}
+                  className="label flex-1 border border-rule px-2 py-2 transition-colors hover:border-brass hover:text-brass disabled:opacity-40"
                 >
-                  Set as path origin
+                  Set as From
                 </button>
                 <button
-                  onClick={() => setPathTarget(inspected.id)}
-                  disabled={inspected.id === origin}
-                  className="label w-full border border-brass/50 px-3 py-2 text-brass transition-colors hover:bg-brass/12 disabled:opacity-40"
+                  onClick={() => setPathTo(selected.id)}
+                  disabled={pathTo === selected.id}
+                  className="label flex-1 border border-brass/50 px-2 py-2 text-brass transition-colors hover:bg-brass/12 disabled:opacity-40"
                 >
-                  Trace connection
+                  Set as To
                 </button>
               </div>
 
-              <div className="mt-3">
-                <DecisionSupportNote>
-                  A path through the graph records that documents connect two people. It is not
-                  evidence of a shared offence, and requires corroboration before any investigative
-                  action.
-                </DecisionSupportNote>
-              </div>
+              <div className="label mb-2">Connected to · {neighbours.length}</div>
+              <ul className="mb-3 divide-y divide-rule/50 border-y border-rule/50">
+                {neighbours.slice(0, 12).map(({ node, kind, predicted }) => (
+                  <li key={node.id}>
+                    <button
+                      onClick={() => selectNode(node.id)}
+                      className="flex w-full items-center gap-2 py-1.5 text-left transition-colors hover:text-brass"
+                    >
+                      <span
+                        className="inline-block h-1.5 w-1.5 shrink-0 rounded-full"
+                        style={{ background: KIND_COLOR[node.kind] }}
+                        aria-hidden
+                      />
+                      <span className="min-w-0 flex-1 truncate text-[0.78rem]">{node.label}</span>
+                      <span
+                        className="label shrink-0"
+                        style={{ fontSize: 9, color: predicted ? PALETTE.brass : undefined }}
+                      >
+                        {predicted ? 'predicted' : kind}
+                      </span>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+
+              <DecisionSupportNote>
+                Centrality and community membership are analytical signals. They are not evidence of
+                an offence, and require corroboration before any investigative action.
+              </DecisionSupportNote>
             </div>
           </Panel>
         ) : (
-          <Panel title="Reading the view" reference="Legend" className="min-h-0 flex-1">
+          <Panel title="Reading the view" reference="Legend" ticked className="min-h-0 flex-1">
             <div className="flex flex-col gap-2.5 p-3">
               <LegendRow
                 swatch={
@@ -370,7 +365,7 @@ export function M2Network({ ready }: { ready: boolean }) {
                   />
                 }
                 label="Node size = how connected"
-                note="Degree and PageRank together"
+                note="Link count and PageRank together"
               />
               <LegendRow
                 swatch={
@@ -389,26 +384,75 @@ export function M2Network({ ready }: { ready: boolean }) {
               />
               <LegendRow
                 swatch={
-                  <span className="inline-block h-[2px] w-4" style={{ background: PALETTE.brassLit }} />
+                  <span className="inline-block h-[2px] w-4" style={{ background: PALETTE.bhuvan }} />
                 }
-                label="Hover spotlights a node"
-                note="Its links light; everything else recedes"
+                label="Line = a recorded relationship"
+                note="Taken from the FIR record"
+              />
+              <LegendRow
+                swatch={
+                  <span className="inline-block h-[2px] w-4" style={{ background: PALETTE.brass }} />
+                }
+                label="Brass line = predicted, not recorded"
+                note="GraphSAGE suggestion — a hypothesis to check"
               />
               <LegendRow
                 swatch={
                   <span className="inline-block h-[2px] w-4" style={{ background: PALETTE.redzone }} />
                 }
-                label="Red chain = traced path"
-                note="Shortest route between two entities"
+                label="Red chain = the traced path"
+                note="Shortest route between From and To"
               />
+
+              <div className="mt-1 border-t border-rule pt-2">
+                <Tag active={showPredicted} onClick={() => toggleLayer('showPredicted')}>
+                  Predicted links ({predictedCount})
+                </Tag>
+                <p className="mt-2 text-[0.72rem] leading-relaxed text-khaki-dim">
+                  Off by default. A prediction drawn like a record would claim evidence the platform
+                  does not have.
+                </p>
+              </div>
+
               <p className="mt-1 border-t border-rule pt-2 text-[0.74rem] leading-relaxed text-khaki-dim">
-                Drag to orbit, scroll to zoom. The layout is a live force simulation — it keeps
-                settling rather than freezing.
+                Hover a node to spotlight it and its links. Click to open its record and fly there.
+                The layout is a live simulation — it keeps settling rather than freezing.
               </p>
             </div>
           </Panel>
         )}
       </div>
+    </div>
+  )
+}
+
+/** One endpoint slot — always on screen, filled or not. */
+function Endpoint({
+  slot,
+  node,
+  onClear,
+}: {
+  slot: string
+  node: GraphNode | null | undefined
+  onClear: () => void
+}) {
+  return (
+    <div className="flex items-center gap-2 border border-rule px-2 py-1.5">
+      <span className="label w-8 shrink-0">{slot}</span>
+      {node ? (
+        <>
+          <span className="min-w-0 flex-1 truncate text-[0.78rem] text-khaki">{node.label}</span>
+          <button
+            onClick={onClear}
+            className="label shrink-0 transition-colors hover:text-brass"
+            aria-label={`Clear ${slot}`}
+          >
+            ×
+          </button>
+        </>
+      ) : (
+        <span className="flex-1 text-[0.76rem] text-khaki-dim">Not set</span>
+      )}
     </div>
   )
 }
@@ -437,13 +481,13 @@ function LegendRow({
   )
 }
 
-function pathEvidence(root: GraphNode, chain: GraphNode[], shared: GraphNode[]) {
+function pathEvidence(chain: GraphNode[], shared: GraphNode[], hops: number) {
   const items: Evidence[] = [
     {
       kind: 'feature',
-      ref: `${root.id}:path`,
+      ref: 'path:derivation',
       label: 'Path derivation',
-      detail: `Unweighted breadth-first shortest path over the entity graph. Every hop is one documented relationship; this chain is ${chain.length - 1} hops long.`,
+      detail: `Unweighted breadth-first shortest path over the entity graph. Every hop is one documented relationship; this chain is ${hops} hops long.`,
     },
     ...chain.map<Evidence>((n) => ({
       kind: n.kind === 'Incident' ? 'incident' : n.kind === 'Person' ? 'person' : 'feature',
@@ -462,7 +506,7 @@ function pathEvidence(root: GraphNode, chain: GraphNode[], shared: GraphNode[]) 
   if (shared.length) {
     items.push({
       kind: 'feature',
-      ref: `${root.id}:common`,
+      ref: 'path:common',
       label: `Common associates (${shared.length})`,
       detail: shared.map((n) => `${n.label} — ${n.district}`).join('; '),
     })
@@ -470,7 +514,7 @@ function pathEvidence(root: GraphNode, chain: GraphNode[], shared: GraphNode[]) 
 
   return {
     title: `${chain[0]?.label} → ${chain[chain.length - 1]?.label}`,
-    subtitle: `${chain.length - 1} hops · shortest path · §7.2 association detection`,
+    subtitle: `${hops} hops · shortest path · §7.2 association detection`,
     items,
   }
 }

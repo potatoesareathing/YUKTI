@@ -27,19 +27,16 @@ interface YuktiState {
   selectedNode: string | null
   selectNode: (id: string | null) => void
 
-  /** MOD-02: the entity in focus, the trail of how we got here, and playback. */
-  egoOrigin: string | null
-  setEgoOrigin: (id: string | null) => void
-  trail: string[]
-  walkTo: (id: string) => void
-  trailBack: (index: number) => void
-  pathTarget: string | null
-  setPathTarget: (id: string | null) => void
-  /** Chain being played back one hop at a time, and where we are in it. */
-  playback: { chain: string[]; index: number } | null
-  startPlayback: (chain: string[]) => void
-  stepPlayback: () => void
-  stopPlayback: () => void
+  /**
+   * MOD-02 path finding. Two explicit endpoints — naming them `from` and `to`
+   * rather than reusing "origin" keeps them distinct from `selectedNode`, which
+   * is simply whatever the analyst last clicked.
+   */
+  pathFrom: string | null
+  pathTo: string | null
+  setPathFrom: (id: string | null) => void
+  setPathTo: (id: string | null) => void
+  clearPath: () => void
 
   /* Filters — shared by every module, so a filter set in MOD-01 still holds
      when the analyst moves to MOD-04. */
@@ -88,49 +85,11 @@ export const useYukti = create<YuktiState>((set, get) => ({
   selectedNode: null,
   selectNode: (selectedNode) => set({ selectedNode }),
 
-  egoOrigin: null,
-  setEgoOrigin: (egoOrigin) =>
-    set({ egoOrigin, trail: egoOrigin ? [egoOrigin] : [], pathTarget: null, selectedNode: null }),
-
-  trail: [],
-  /** Step to a neighbour, recording the route. Revisiting truncates rather
-   *  than looping, so the trail always reads as the path actually walked. */
-  walkTo: (id) =>
-    set((s) => {
-      const at = s.trail.indexOf(id)
-      return {
-        egoOrigin: id,
-        trail: at >= 0 ? s.trail.slice(0, at + 1) : [...s.trail, id],
-        selectedNode: null,
-      }
-    }),
-  trailBack: (index) =>
-    set((s) => ({
-      egoOrigin: s.trail[index] ?? s.egoOrigin,
-      trail: s.trail.slice(0, index + 1),
-      selectedNode: null,
-      playback: null,
-    })),
-
-  pathTarget: null,
-  setPathTarget: (pathTarget) => set({ pathTarget }),
-
-  playback: null,
-  startPlayback: (chain) =>
-    set({ playback: { chain, index: 0 }, egoOrigin: chain[0], trail: [chain[0]], selectedNode: null }),
-  stepPlayback: () =>
-    set((s) => {
-      if (!s.playback) return s
-      const next = s.playback.index + 1
-      if (next >= s.playback.chain.length) return { playback: null }
-      const id = s.playback.chain[next]
-      return {
-        playback: { ...s.playback, index: next },
-        egoOrigin: id,
-        trail: s.playback.chain.slice(0, next + 1),
-      }
-    }),
-  stopPlayback: () => set({ playback: null }),
+  pathFrom: null,
+  pathTo: null,
+  setPathFrom: (pathFrom) => set({ pathFrom }),
+  setPathTo: (pathTo) => set({ pathTo }),
+  clearPath: () => set({ pathFrom: null, pathTo: null }),
 
   categories: [...CRIME_CATEGORIES],
   toggleCategory: (c) =>

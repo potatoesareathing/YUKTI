@@ -115,7 +115,11 @@ function pageRank(nodes: GraphNode[], edges: GraphEdge[], d = 0.85, iters = 40):
   const max = Math.max(...rank)
   nodes.forEach((node, i) => {
     node.centrality = max > 0 ? rank[i] / max : 0
-    node.degree = adj[i].length
+    // DISTINCT neighbours, not adjacency entries. Two people co-accused in three
+    // separate FIRs generate three edges, and counting those as three links
+    // inflates every "direct links" figure in the platform and makes the same
+    // name appear three times in a connections list.
+    node.degree = new Set(adj[i]).size
   })
 }
 

@@ -76,7 +76,9 @@ interface Placed {
 export function GraphView() {
   const selectedNode = useYukti((s) => s.selectedNode)
   const selectNode = useYukti((s) => s.selectNode)
-  const pathTarget = useYukti((s) => s.pathTarget)
+  const pathFrom = useYukti((s) => s.pathFrom)
+  const pathTo = useYukti((s) => s.pathTo)
+  const showPredicted = useYukti((s) => s.showPredicted)
 
   const { camera } = useThree()
   const controls = useThree((state) => state.controls) as
@@ -85,6 +87,7 @@ export function GraphView() {
   const spinner = useRef<Group>(null)
   const meshes = useRef(new Map<NodeKind, InstancedMesh>())
   const edgeRef = useRef<BufferGeometry>(null)
+  const predictedRef = useRef<BufferGeometry>(null)
   const dummy = useMemo(() => new Object3D(), [])
   const scratch = useMemo(() => new Color(), [])
   const [hovered, setHovered] = useState<string | null>(null)
@@ -155,7 +158,16 @@ export function GraphView() {
   }, [placed])
 
   const edges = useMemo(() => graph.edges, [graph.edges])
-  const edgeBuffer = useMemo(() => new Float32Array(edges.length * 6), [edges])
+  /**
+   * Observed and predicted are kept apart all the way to the draw call. A
+   * GraphSAGE suggestion rendered the same as a recorded association claims the
+   * platform has evidence it does not have — §10.3 turns on exactly this
+   * distinction, so it cannot be a styling afterthought.
+   */
+  const observed = useMemo(() => edges.filter((e) => !e.predicted), [edges])
+  const predicted = useMemo(() => edges.filter((e) => e.predicted), [edges])
+  const edgeBuffer = useMemo(() => new Float32Array(observed.length * 6), [observed])
+  const predictedBuffer = useMemo(() => new Float32Array(predicted.length * 6), [predicted])
 
   /** Everything one step from what the pointer or the selection is on. */
   const focus = useMemo(() => {
@@ -191,14 +203,43 @@ export function GraphView() {
   const flyTo = useRef<Vector3 | null>(null)
   const halo = useRef<Mesh>(null)
 
+  const pathChain = useMemo(
+    () => (pathFrom && pathTo ? (shortestPath(pathFrom, pathTo)?.nodes.map((n) => n.id) ?? []) : []),
+    [pathFrom, pathTo],
+  )
+
+  /** Standoff for the current subject: one node, or a whole traced chain. */
+  const framing = useRef(FOCUS_DISTANCE)
+
   useEffect(() => {
+    // A traced path takes priority over a single selection: the route is the
+    // subject, and both ends of it have to be in frame.
+    if (pathChain.length > 1) {
+      const pts = pathChain.map((id) => sim.byId.get(id)).filter(Boolean)
+      const centre = new Vector3()
+      for (const p of pts) centre.add(new Vector3(p!.x ?? 0, p!.y ?? 0, p!.z ?? 0))
+      centre.multiplyScalar(SPREAD / pts.length)
+
+      let extent = 1
+      for (const p of pts) {
+        extent = Math.max(
+          extent,
+          centre.distanceTo(new Vector3((p!.x ?? 0) * SPREAD, (p!.y ?? 0) * SPREAD, (p!.z ?? 0) * SPREAD)),
+        )
+      }
+      flyTo.current = centre
+      framing.current = Math.max(FOCUS_DISTANCE, extent * 2.6)
+      return
+    }
+
+    framing.current = FOCUS_DISTANCE
     if (!selectedNode) {
       flyTo.current = null
       return
     }
     const p = sim.byId.get(selectedNode)
     if (p) flyTo.current = new Vector3((p.x ?? 0) * SPREAD, (p.y ?? 0) * SPREAD, (p.z ?? 0) * SPREAD)
-  }, [selectedNode, sim])
+  }, [selectedNode, sim, pathChain])
 
   useFrame((_, delta) => {
     const s = sim.simulation
@@ -207,12 +248,25 @@ export function GraphView() {
     const current = (s as unknown as { alpha(): number }).alpha?.() ?? 1
     if (current < IDLE_ALPHA) s.alpha(IDLE_ALPHA)
 
-    // Idle rotation stops while a node is selected — the analyst is reading it,
+    // Idle rotation stops while there is a subject — the analyst is reading it,
     // and a target that keeps drifting is a target you have to chase.
-    if (spinner.current && !selectedNode) spinner.current.rotation.y += delta * ROTATE_SPEED
+    const holding = selectedNode || pathChain.length > 1
+    if (spinner.current && !holding) spinner.current.rotation.y += delta * ROTATE_SPEED
 
     if (flyTo.current && controls) {
-      const live = sim.byId.get(selectedNode ?? '')
+      // The path centroid is fixed in simulation space, so it needs the same
+      // rotation the nodes get from the spinning group.
+      if (pathChain.length > 1 && spinner.current) {
+        // recomputed each frame so it tracks the still-settling simulation
+        const pts = pathChain.map((id) => sim.byId.get(id)).filter(Boolean)
+        if (pts.length) {
+          flyTo.current.set(0, 0, 0)
+          for (const p of pts) flyTo.current.add(new Vector3(p!.x ?? 0, p!.y ?? 0, p!.z ?? 0))
+          flyTo.current.multiplyScalar(SPREAD / pts.length)
+          flyTo.current.applyAxisAngle(UP, spinner.current.rotation.y)
+        }
+      }
+      const live = pathChain.length > 1 ? null : sim.byId.get(selectedNode ?? '')
       if (live) {
         flyTo.current.set((live.x ?? 0) * SPREAD, (live.y ?? 0) * SPREAD, (live.z ?? 0) * SPREAD)
         // The graph spins, so the node's world position is its simulation
@@ -223,7 +277,7 @@ export function GraphView() {
       controls.target.lerp(flyTo.current, k)
       const want = flyTo.current
         .clone()
-        .add(camera.position.clone().sub(controls.target).normalize().multiplyScalar(FOCUS_DISTANCE))
+        .add(camera.position.clone().sub(controls.target).normalize().multiplyScalar(framing.current))
       camera.position.lerp(want, k * 0.75)
       controls.update()
 
@@ -260,21 +314,28 @@ export function GraphView() {
       if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true
     }
 
-    edges.forEach((e, i) => {
-      const a = sim.byId.get(e.source)
-      const b = sim.byId.get(e.target)
-      if (!a || !b) return
-      edgeBuffer[i * 6] = (a.x ?? 0) * SPREAD
-      edgeBuffer[i * 6 + 1] = (a.y ?? 0) * SPREAD
-      edgeBuffer[i * 6 + 2] = (a.z ?? 0) * SPREAD
-      edgeBuffer[i * 6 + 3] = (b.x ?? 0) * SPREAD
-      edgeBuffer[i * 6 + 4] = (b.y ?? 0) * SPREAD
-      edgeBuffer[i * 6 + 5] = (b.z ?? 0) * SPREAD
-    })
-    if (edgeRef.current) {
-      const attr = edgeRef.current.getAttribute('position')
+    const writeInto = (list: typeof edges, buf: Float32Array) => {
+      list.forEach((e, i) => {
+        const a = sim.byId.get(e.source)
+        const b = sim.byId.get(e.target)
+        if (!a || !b) return
+        buf[i * 6] = (a.x ?? 0) * SPREAD
+        buf[i * 6 + 1] = (a.y ?? 0) * SPREAD
+        buf[i * 6 + 2] = (a.z ?? 0) * SPREAD
+        buf[i * 6 + 3] = (b.x ?? 0) * SPREAD
+        buf[i * 6 + 4] = (b.y ?? 0) * SPREAD
+        buf[i * 6 + 5] = (b.z ?? 0) * SPREAD
+      })
+    }
+    writeInto(observed, edgeBuffer)
+    if (showPredicted) writeInto(predicted, predictedBuffer)
+
+    const mark = (g: BufferGeometry | null) => {
+      const attr = g?.getAttribute('position')
       if (attr) attr.needsUpdate = true
     }
+    mark(edgeRef.current)
+    mark(predictedRef.current)
   })
 
   /* Labels: what you are pointing at, its neighbours, and the few busiest. */
@@ -337,6 +398,20 @@ export function GraphView() {
           />
         </lineSegments>
 
+        {showPredicted && predicted.length > 0 && (
+          <lineSegments frustumCulled={false} renderOrder={1}>
+            <bufferGeometry ref={predictedRef}>
+              <bufferAttribute attach="attributes-position" args={[predictedBuffer, 3]} />
+            </bufferGeometry>
+            <lineBasicMaterial
+              color={PALETTE.brass}
+              transparent
+              opacity={focus ? 0.08 : 0.75}
+              depthWrite={false}
+            />
+          </lineSegments>
+        )}
+
         {focus && <FocusEdges edges={edges} sim={sim} focusId={focus.id} />}
 
         {[...byKind.entries()].map(([kind, list]) => (
@@ -370,6 +445,11 @@ export function GraphView() {
         ))}
 
         <GraphLabels placed={placed} labelled={labelled} focusId={focus?.id ?? null} />
+
+        {/* Inside the spinning group: the chain is built from simulation
+            coordinates, so drawing it outside left it drifting off the nodes as
+            the graph rotated. */}
+        {pathFrom && pathTo && <PathHighlight sim={sim} from={pathFrom} to={pathTo} />}
       </group>
 
       {selectedNode && (
@@ -379,7 +459,6 @@ export function GraphView() {
         </mesh>
       )}
 
-      {pathTarget && <PathHighlight sim={sim} />}
     </group>
   )
 }
@@ -497,14 +576,20 @@ function GraphLabels({
 }
 
 /** The shortest-path chain, lit over the dimmed graph. */
-function PathHighlight({ sim }: { sim: { byId: Map<string, SimNode> } }) {
-  const origin = useYukti((s) => s.egoOrigin)
-  const target = useYukti((s) => s.pathTarget)
+function PathHighlight({
+  sim,
+  from,
+  to,
+}: {
+  sim: { byId: Map<string, SimNode> }
+  from: string
+  to: string
+}) {
   const ref = useRef<BufferGeometry>(null)
 
   const chain = useMemo(
-    () => (origin && target ? (shortestPath(origin, target)?.nodes.map((n) => n.id) ?? []) : []),
-    [origin, target],
+    () => shortestPath(from, to)?.nodes.map((n) => n.id) ?? [],
+    [from, to],
   )
 
   const buffer = useMemo(() => new Float32Array(Math.max(1, chain.length - 1) * 6), [chain])
