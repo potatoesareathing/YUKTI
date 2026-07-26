@@ -6,6 +6,7 @@ import { resetSceneClock } from '@/three/clock'
 import { useGeo } from '@/three/useGeo'
 import { InstrumentFrame } from '@/ui/InstrumentFrame'
 import { EvidenceDrawer } from '@/ui/EvidenceDrawer'
+import { AskDock } from '@/ui/AskDock'
 import { useYukti, type ModuleId } from '@/store/useYukti'
 import { compact } from '@/lib/format'
 import { ID_BY_SLUG, MODULE_BY_ID, MODULES, SLUG_BY_ID } from './modules'
@@ -96,6 +97,7 @@ export function Platform() {
       />
 
       <EvidenceDrawer />
+      <AskDock />
     </div>
   )
 }
