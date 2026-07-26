@@ -173,6 +173,15 @@ evidence drawer. Responsive to mobile, where Act I re-frames and the scrim goes 
 - **No auth, no audit log.** §10.1 requires both. They belong server-side and are out of scope here;
   the evidence drawer's footer states the logging requirement rather than implementing it.
 
+## Handoff documents
+
+| Document | For |
+|---|---|
+| **[docs/BACKEND.md](docs/BACKEND.md)** | The backend build: the exact contract, the KSP schema mapping, build order, and prompts for an AI IDE |
+| **[docs/DATA-AND-MODELS.md](docs/DATA-AND-MODELS.md)** | Real data sources, and how to train and serve the eight §8 models |
+
+Both are written to be handed to someone who has not seen this repo.
+
 ## Reference
 
 Design spec: `docs/superpowers/specs/2026-07-25-yukti-frontend-design.md`
