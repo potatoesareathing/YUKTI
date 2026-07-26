@@ -153,7 +153,14 @@ function makeMo(r: Rng, sig: MoSignature): ModusOperandi {
   }
 }
 
-/** Hotspot cores per district — more cores where there is more urban fabric. */
+/**
+ * Hotspot cores per district — more cores where there is more urban fabric.
+ *
+ * Each core doubles as a police station's territory. Naming stations at random
+ * and scattering their incidents across the whole district gives every station
+ * the same centroid, so on the map they stack into one pile and the
+ * station-level drill-down has nothing to distinguish. A station owns a place.
+ */
 function makeCores(d: DistrictFeature, urbanPct: number, r: Rng): [number, number][] {
   const n = 2 + Math.floor(urbanPct / 22)
   return Array.from({ length: n }, () => samplePointInDistrict(d, r))
@@ -182,8 +189,14 @@ function build(features: DistrictFeature[]): Incident[] {
     // street-scale, Kodagu's are valley-scale.
     const spread = 0.055 + (1 - m.urbanPct / 100) * 0.16
 
+    const coreIndex = cores.map((_, i) => i)
+    const stationOf = cores.map(
+      (_, i) => `${m.name.split(' ')[0]} ${STATION_SUFFIX[i % STATION_SUFFIX.length]}`,
+    )
+
     for (let i = 0; i < count; i++) {
-      const core = pickWeighted(r, cores, coreWeights)
+      const ci = pickWeighted(r, coreIndex, coreWeights)
+      const core = cores[ci]
       const lon = core[0] + gaussian(r, 0, spread)
       const lat = core[1] + gaussian(r, 0, spread)
       const category = pickWeighted(r, CRIME_CATEGORIES, catWeights)
@@ -201,7 +214,7 @@ function build(features: DistrictFeature[]): Incident[] {
         docket: docket('FIR', serial),
         category,
         district: m.name,
-        station: `${m.name.split(' ')[0]} ${pick(r, STATION_SUFFIX)}`,
+        station: stationOf[ci],
         lonLat: [lon, lat],
         world: toWorldXZ(lon, lat),
         at,

@@ -24,6 +24,10 @@ interface YuktiState {
   setHoveredDistrict: (d: string | null) => void
   selectDistrict: (d: string | null) => void
 
+  /** MOD-01's third drill-down tier: a police station inside a district. */
+  selectedStation: string | null
+  selectStation: (id: string | null) => void
+
   selectedNode: string | null
   selectNode: (id: string | null) => void
 
@@ -80,7 +84,11 @@ export const useYukti = create<YuktiState>((set, get) => ({
   hoveredDistrict: null,
   selectedDistrict: null,
   setHoveredDistrict: (hoveredDistrict) => set({ hoveredDistrict }),
-  selectDistrict: (selectedDistrict) => set({ selectedDistrict }),
+  // Changing district invalidates any station selection inside the old one.
+  selectDistrict: (selectedDistrict) => set({ selectedDistrict, selectedStation: null }),
+
+  selectedStation: null,
+  selectStation: (selectedStation) => set({ selectedStation }),
 
   selectedNode: null,
   selectNode: (selectedNode) => set({ selectedNode }),

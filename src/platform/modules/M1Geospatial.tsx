@@ -1,12 +1,14 @@
-import { useMemo } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Panel, Stat, Field, Tag, RiskPill, Empty } from '@/ui/primitives'
 import { RankedBars, Sparkline } from '@/ui/charts'
 import { useYukti } from '@/store/useYukti'
 import { getDistrictMetrics, stateTotals } from '@/data/districts'
 import { getCategorySeries } from '@/data/timeseries'
+import { getStations, peekStations, type StationMetrics } from '@/data/stations'
 import { CRIME_CATEGORIES } from '@/data/types'
-import { compact, inr, delta } from '@/lib/format'
+import { compact, inr, delta, shortDate } from '@/lib/format'
 import { riskBand, riskCss, BAND_LABEL, PALETTE } from '@/lib/palette'
+import { pct } from '@/lib/format'
 
 /**
  * MOD-01 — Advanced Visualisation & Geospatial Maps (§7.1).
@@ -30,6 +32,37 @@ export function M1Geospatial({ ready, onPick }: Props) {
   const showIncidents = useYukti((s) => s.showIncidents)
   const showLabels = useYukti((s) => s.showLabels)
   const toggleLayer = useYukti((s) => s.toggleLayer)
+  const selectedStation = useYukti((s) => s.selectedStation)
+  const selectStation = useYukti((s) => s.selectStation)
+  const [stations, setStations] = useState<StationMetrics[]>([])
+
+  useEffect(() => {
+    let live = true
+    getStations().then(() => {
+      if (!live) return
+      const all = peekStations()
+      setStations(all)
+
+      // ?district=<name>&station=<n> opens a tier directly.
+      const params = new URLSearchParams(window.location.search)
+      const d = params.get('district')
+      if (d) {
+        onPick(d)
+        const raw = params.get('station')
+        if (raw !== null && raw.trim() !== '') {
+          const n = Number(raw)
+          const inDistrict = all.filter((x) => x.district === d)
+          if (Number.isInteger(n) && inDistrict[n]) {
+            const id = inDistrict[n].id
+            queueMicrotask(() => selectStation(id))
+          }
+        }
+      }
+    })
+    return () => {
+      live = false
+    }
+  }, [onPick, selectStation])
 
   const districts = useMemo(() => getDistrictMetrics(), [])
   const totals = useMemo(() => stateTotals(), [])
@@ -50,6 +83,14 @@ export function M1Geospatial({ ready, onPick }: Props) {
       }))
       .sort((a, b) => b.value - a.value)
   }, [districts, categories])
+
+  const districtStations = useMemo(
+    () => (selected ? stations.filter((s) => s.district === selected) : []),
+    [selected, stations],
+  )
+  const station = selectedStation
+    ? districtStations.find((s) => s.id === selectedStation)
+    : undefined
 
   const filtered = categories.length < CRIME_CATEGORIES.length
 
@@ -199,24 +240,93 @@ export function M1Geospatial({ ready, onPick }: Props) {
           </Panel>
         )}
 
-        <Panel
-          title={filtered ? 'Ranked · filtered' : 'Ranked by volume'}
-          reference={`${ranked.length} districts`}
-          scroll
-          className="min-h-0 flex-1"
-        >
-          {ready ? (
-            <RankedBars
-              rows={ranked}
-              colorBy="risk"
-              format={compact}
-              onSelect={(k) => onPick(k === selected ? null : k)}
-              selected={selected}
-            />
-          ) : (
-            <Empty>Waiting for district boundaries.</Empty>
-          )}
-        </Panel>
+        {selected ? (
+          <Panel
+            title={station ? station.name : 'Police stations'}
+            reference={station ? 'Station' : `${districtStations.length} in ${selected}`}
+            scroll
+            className="min-h-0 flex-1"
+            action={
+              station ? (
+                <button
+                  className="label transition-colors hover:text-brass"
+                  onClick={() => selectStation(null)}
+                >
+                  All stations
+                </button>
+              ) : null
+            }
+          >
+            {station ? (
+              <div className="p-3">
+                <div className="mb-3 flex items-start justify-between gap-3">
+                  <Stat
+                    label="Records · estimated"
+                    value={`~${compact(station.estimated)}`}
+                    size="lg"
+                    sub={`${pct(station.share)} of ${station.district}`}
+                  />
+                  {station.anomalies > 0 && (
+                    <Stat label="Anomalies" value={String(station.anomalies)} tone="alert" size="sm" />
+                  )}
+                </div>
+
+                <Field name="Predominant">{station.topCategory}</Field>
+                <Field name="Sampled records">{station.sampled}</Field>
+                <Field name="Most recent">{shortDate(new Date(station.lastAt))}</Field>
+
+                <div className="label mb-2 mt-3">Category mix</div>
+                <RankedBars
+                  rows={CRIME_CATEGORIES.map((c) => ({
+                    key: c,
+                    label: c,
+                    value: station.byCategory[c],
+                  }))
+                    .filter((r) => r.value > 0)
+                    .sort((a, b) => b.value - a.value)
+                    .slice(0, 5)}
+                  format={(n) => String(n)}
+                />
+
+                <p className="mt-3 border-l border-brass/40 pl-3 text-[0.72rem] leading-relaxed text-khaki-dim">
+                  Station figures are estimated: the station's share of the district's sampled
+                  records applied to the district total. Position is the centre of its recorded
+                  activity, not the address of the building.
+                </p>
+              </div>
+            ) : (
+              <RankedBars
+                rows={districtStations.map((s) => ({
+                  key: s.id,
+                  label: s.name,
+                  value: s.estimated,
+                }))}
+                format={(n) => `~${compact(n)}`}
+                onSelect={(k) => selectStation(k === selectedStation ? null : k)}
+                selected={selectedStation}
+              />
+            )}
+          </Panel>
+        ) : (
+          <Panel
+            title={filtered ? 'Ranked · filtered' : 'Ranked by volume'}
+            reference={`${ranked.length} districts`}
+            scroll
+            className="min-h-0 flex-1"
+          >
+            {ready ? (
+              <RankedBars
+                rows={ranked}
+                colorBy="risk"
+                format={compact}
+                onSelect={(k) => onPick(k === selected ? null : k)}
+                selected={selected}
+              />
+            ) : (
+              <Empty>Waiting for district boundaries.</Empty>
+            )}
+          </Panel>
+        )}
       </div>
     </div>
   )

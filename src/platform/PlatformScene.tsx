@@ -1,4 +1,4 @@
-import { useMemo } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useFrame } from '@react-three/fiber'
 import { CameraRig, STATIONS, stationFor, type CameraStation } from '@/three/CameraRig'
 import { Districts } from '@/three/Districts'
@@ -6,11 +6,13 @@ import { DistrictLabels } from '@/three/DistrictLabels'
 import { BasePlate, Graticule, InstrumentFrame as SceneFrame } from '@/three/Groundwork'
 import { HotspotLayer } from '@/three/HotspotLayer'
 import { IncidentField } from '@/three/IncidentField'
+import { StationMarkers } from '@/three/StationMarkers'
 import { GraphView } from '@/three/GraphView'
 import { Rig } from '@/three/Scene'
 import { sceneClock } from '@/three/clock'
 import type { DistrictFeature } from '@/lib/geo'
 import type { Incident } from '@/data/types'
+import { getStations, peekStations, type StationMetrics } from '@/data/stations'
 import { useYukti, prefersReducedMotion } from '@/store/useYukti'
 
 /**
@@ -36,16 +38,38 @@ interface MapSceneProps {
 
 export function MapScene({ features, incidents }: MapSceneProps) {
   const selected = useYukti((s) => s.selectedDistrict)
+  const selectedStation = useYukti((s) => s.selectedStation)
+  const [stations, setStations] = useState<StationMetrics[]>([])
+
+  useEffect(() => {
+    let live = true
+    getStations().then(() => {
+      if (live) setStations(peekStations())
+    })
+    return () => {
+      live = false
+    }
+  }, [])
+
+  // Stations only exist as a tier inside an open district.
+  const districtStations = useMemo(
+    () => (selected ? stations.filter((s) => s.district === selected) : []),
+    [selected, stations],
+  )
+  const station = selectedStation
+    ? districtStations.find((s) => s.id === selectedStation)
+    : undefined
   const showHotspots = useYukti((s) => s.showHotspots)
   const showIncidents = useYukti((s) => s.showIncidents)
   const reduced = useMemo(prefersReducedMotion, [])
 
-  const station: CameraStation = useMemo(() => {
+  const view: CameraStation = useMemo(() => {
+    // Three tiers, three standoffs: the state is surveyed, a district is
+    // inspected, a station is examined.
+    if (station) return stationFor(station.world, 22, 20)
     const f = selected ? features.find((x) => x.name === selected) : undefined
-    // Standoff scales with how much of the state we still want in view: a
-    // selected district is inspected, the state as a whole is surveyed.
     return f ? stationFor(f.world, 52, 44) : STATIONS.plan
-  }, [selected, features])
+  }, [selected, features, station])
 
   // The hotspot layer is only meaningful lying flat; extrusions occlude it.
   const flatten = showHotspots
@@ -60,7 +84,7 @@ export function MapScene({ features, incidents }: MapSceneProps) {
   return (
     <>
       <Rig />
-      <CameraRig station={station} speed={1.5} userCanInterrupt />
+      <CameraRig station={view} speed={1.5} userCanInterrupt />
 
       <BasePlate />
       <Graticule opacity={0.3} />
@@ -81,6 +105,10 @@ export function MapScene({ features, incidents }: MapSceneProps) {
           size={2.6}
           height={flatten ? HOTSPOT_Y + 0.6 : 1.2}
         />
+      )}
+
+      {districtStations.length > 0 && (
+        <StationMarkers stations={districtStations} baseY={flatten ? HOTSPOT_Y + 0.2 : 0.6} />
       )}
 
       <DistrictLabels features={features} topN={selected ? 0 : 7} />
