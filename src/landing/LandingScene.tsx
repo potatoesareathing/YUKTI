@@ -60,14 +60,38 @@ export function LandingScene({ progress, features, incidents }: LandingSceneProp
   const pTwo = ease(band(progress, ACTS.two[0], ACTS.two[1]))
   const pThree = ease(band(progress, ACTS.three[0] - 0.02, ACTS.three[1] - 0.08))
 
+  /**
+   * A continuous camera path, not three stations with jump cuts between them.
+   *
+   * Switching station at an act boundary let the rig lerp from wherever it was
+   * to wherever it was going, and the frames in between belonged to neither
+   * composition — at the Act I→II handover the state slid out of frame with
+   * half the screen empty. Interpolating the stations themselves means every
+   * intermediate frame is a deliberate blend of two framings that both work.
+   */
   const station: CameraStation = useMemo(() => {
-    if (progress >= ACTS.three[0]) return STATIONS.network
-    // Close enough that the hotspot contours resolve, far enough that
-    // Bengaluru's neighbours stay in frame — a dive that loses all context
-    // stops being a drill-down and becomes a different map.
-    if (progress >= ACTS.two[0]) return stationFor(bengaluru, narrow ? 96 : 78, narrow ? 76 : 62)
-    return narrow ? STATIONS.stateNarrow : STATIONS.state
-  }, [progress, bengaluru, narrow])
+    const overview = narrow ? STATIONS.stateNarrow : STATIONS.state
+    const dive = stationFor(bengaluru, narrow ? 96 : 78, narrow ? 76 : 62)
+
+    const blend = (a: CameraStation, b: CameraStation, t: number): CameraStation => ({
+      position: [
+        a.position[0] + (b.position[0] - a.position[0]) * t,
+        a.position[1] + (b.position[1] - a.position[1]) * t,
+        a.position[2] + (b.position[2] - a.position[2]) * t,
+      ],
+      target: [
+        a.target[0] + (b.target[0] - a.target[0]) * t,
+        a.target[1] + (b.target[1] - a.target[1]) * t,
+        a.target[2] + (b.target[2] - a.target[2]) * t,
+      ],
+    })
+
+    // Act I → II runs over the first half of Act II, so the dive has settled
+    // before the hotspot copy arrives. II → III runs on the morph itself.
+    const toDive = ease(band(progress, ACTS.one[1] - 0.06, ACTS.two[0] + 0.12))
+    const toGraph = pThree
+    return blend(blend(overview, dive, toDive), STATIONS.network, toGraph)
+  }, [progress, bengaluru, narrow, pThree])
 
   useFrame((_, delta) => {
     sceneClock.elapsed += delta

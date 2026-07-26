@@ -51,7 +51,11 @@ export function Landing() {
     })
   }, [selectDistrict, selectNode])
 
-  const actOne = window01(progress, -0.05, ACTS.one[1] - 0.02, 0.1)
+  // Act I must be FULLY opaque at the top of the page. Starting its window at
+  // -0.05 with a 0.1 fade left the ramp only half-complete at progress 0, so the
+  // hero — and its scrim — rendered at 50%: washed-out type with the map
+  // bleeding through it, worst of all on mobile where the scrim does the work.
+  const actOne = window01(progress, -0.2, ACTS.one[1] - 0.02, 0.1)
   const actTwo = window01(progress, ACTS.two[0] - 0.04, ACTS.two[1] - 0.02, 0.09)
   const actThree = window01(progress, ACTS.three[0] + 0.02, 1.05, 0.09)
 
