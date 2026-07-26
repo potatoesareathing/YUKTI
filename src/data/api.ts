@@ -1,72 +1,181 @@
-import { seeded } from '@/lib/rng'
-import { riskBand } from '@/lib/palette'
-import { shortDate } from '@/lib/format'
-import { getDistrictMetrics, NOW } from './districts'
-import { getIncidents } from './incidents'
-import { getStations } from './stations'
-import { getNetwork, getEgoNetwork } from './network'
-import { getCategorySeries, getDistrictSeries } from './timeseries'
-import { getModelCards } from './models'
+/**
+ * ─────────────────────────────────────────────────────────────────────────────
+ *  THE SWAP POINT — backed by the YUKTI FastAPI service
+ * ─────────────────────────────────────────────────────────────────────────────
+ *
+ * Async loaders fetch from VITE_API_BASE_URL. Sync accessors read module caches
+ * hydrated by `loadPlatformData()` (GET /api/bootstrap). Path helpers remain
+ * pure client-side over the cached graph.
+ */
+
 import type {
   AnomalyFlag,
   CrimeCategory,
   DistrictMetrics,
-  Evidence,
+  EdgeKind,
   GraphData,
+  GraphEdge,
+  GraphNode,
   Incident,
   IncidentFilter,
   ModelCard,
   RiskScore,
   TrendSeries,
 } from './types'
+import { CENSUS_2011, KARNATAKA_STATIONS } from './census'
+import type { StationMetrics } from './stations'
+import type { OffenderProfile } from './offenders'
+import type { DistrictFlow, DistrictHub, FlowAggregate } from './flows'
+import type { PathLink, PathResult } from './graphpaths'
 
-/**
- * ─────────────────────────────────────────────────────────────────────────────
- *  THE SWAP POINT
- * ─────────────────────────────────────────────────────────────────────────────
- *
- *  This is the only file the backend team replaces. Every function below returns
- *  synthetic, seeded data today; each maps to a service described in §5.2 and
- *  §6.1 of the technical solution document:
- *
- *    getDistricts    → aggregate query service over PostgreSQL / PostGIS
- *    getIncidents    → FIR query service (Elasticsearch for narrative search)
- *    getNetwork      → Neo4j graph service (§9.2 schema)
- *    getTimeSeries   → analytics service reading precomputed STL/CUSUM output
- *    getRiskScores   → model-serving endpoint for the gradient-boosted model
- *    getAnomalies    → model-serving endpoint for Isolation Forest output
- *    getModels       → MLflow registry
- *
- *  THIS IS THE UI'S ONLY DOOR INTO THE DATA. Nothing under src/platform,
- *  src/landing or src/three imports a data module directly — they all import
- *  from here, so replacing this file genuinely replaces the data layer. An
- *  earlier version documented that promise without enforcing it: twenty-eight
- *  imports reached past this file straight into the generators, and swapping it
- *  would have changed almost nothing on screen.
- *
- *  Two shapes are exported, and the difference matters when wiring a real
- *  backend:
- *
- *    ASYNC  the natural contract — replace with a fetch and the UI is unchanged.
- *    SYNC   accessors the render path calls inside useMemo. These read from a
- *           cache and must be warm before use; `loadPlatformData()` warms it.
- *           To back these with a network call, hydrate the cache in that loader
- *           and keep the accessors synchronous.
- *
- *  CONTRACT NOTE: RiskScore and AnomalyFlag both carry a non-optional
- *  `evidence` array. §10.3 requires that a model output surfaced to an
- *  investigator links back to the records that produced it, so the type makes an
- *  unexplainable score impossible to construct. Keep it that way.
- */
+export type { StationMetrics } from './stations'
+export type { OffenderProfile } from './offenders'
+export type { PathResult, PathLink } from './graphpaths'
+export type { DistrictFlow, DistrictHub } from './flows'
+export { CENSUS_2011, KARNATAKA_STATIONS }
 
-/**
- * Resolution helper. Trivial today; it exists so that every call site is already
- * written against a promise and the swap to real fetches touches only this file.
- */
-const settle = <T,>(value: T): Promise<T> => Promise.resolve(value)
+const BASE = (import.meta.env.VITE_API_BASE_URL as string | undefined)?.replace(/\/$/, '') || 'http://127.0.0.1:8000'
+
+export const DRIFT_THRESHOLD = 0.05
+export let NOW = Date.parse('2026-07-25T00:00:00Z')
+export let PERIOD_DAYS = 180
+
+interface Community {
+  id: number
+  label: string
+  size: number
+  district: string
+  topNode: GraphNode
+}
+
+interface AlertItem {
+  series: TrendSeries
+  at: number
+  index: number
+}
+
+interface Envelope<T> {
+  success: boolean
+  data: T
+  error: string | null
+  meta: { total: number; page: number; limit: number }
+}
+
+interface Bootstrap {
+  districts: DistrictMetrics[]
+  stateTotals: ReturnType<typeof buildStateTotals>
+  incidents: Incident[]
+  stations: StationMetrics[]
+  network: GraphData
+  communities: Community[]
+  models: ModelCard[]
+  offenders: OffenderProfile[]
+  flows: FlowAggregate
+  alerts: AlertItem[]
+  riskScores: RiskScore[]
+  anomalies: AnomalyFlag[]
+  categorySeries: Record<string, TrendSeries>
+  districtSeries: Record<string, TrendSeries>
+  now: number
+  periodDays: number
+}
+
+let districtsCache: DistrictMetrics[] = []
+let incidentsCache: Incident[] = []
+let stationsCache: StationMetrics[] = []
+let networkCache: GraphData = { nodes: [], edges: [] }
+let communitiesCache: Community[] = []
+let modelsCache: ModelCard[] = []
+let offendersCache: OffenderProfile[] = []
+let flowsCache: FlowAggregate | null = null
+let alertsCache: AlertItem[] = []
+let riskCache: RiskScore[] = []
+let anomaliesCache: AnomalyFlag[] = []
+let categorySeriesCache: Record<string, TrendSeries> = {}
+let districtSeriesCache: Record<string, TrendSeries> = {}
+let stateTotalsCache: ReturnType<typeof buildStateTotals> | null = null
+let adjacency: {
+  neighbours: Map<string, { id: string; edge: GraphEdge }[]>
+  byId: Map<string, GraphNode>
+} | null = null
+let ready: Promise<void> | null = null
+
+function buildStateTotals(ds: DistrictMetrics[]) {
+  const byCategory = {} as Record<CrimeCategory, number>
+  for (const d of ds) {
+    for (const [k, v] of Object.entries(d.byCategory)) {
+      byCategory[k as CrimeCategory] = (byCategory[k as CrimeCategory] ?? 0) + v
+    }
+  }
+  return {
+    incidents: ds.reduce((a, d) => a + d.incidents, 0),
+    byCategory,
+    redZones: ds.filter((d) => d.redZone).length,
+    stations: ds.reduce((a, d) => a + d.stations, 0),
+    avgClearance: Math.round(ds.reduce((a, d) => a + d.clearancePct, 0) / Math.max(1, ds.length)),
+  }
+}
+
+async function apiGet<T>(path: string, query?: Record<string, string | number | boolean | undefined>): Promise<T> {
+  const url = new URL(`${BASE}${path}`)
+  if (query) {
+    for (const [k, v] of Object.entries(query)) {
+      if (v === undefined) continue
+      url.searchParams.set(k, String(v))
+    }
+  }
+  const res = await fetch(url.toString())
+  if (!res.ok) throw new Error(`API ${path} → HTTP ${res.status}`)
+  const body = (await res.json()) as Envelope<T>
+  if (!body.success) throw new Error(body.error || `API ${path} failed`)
+  return body.data
+}
+
+function hydrate(b: Bootstrap) {
+  districtsCache = b.districts
+  stateTotalsCache = b.stateTotals
+  incidentsCache = b.incidents
+  stationsCache = b.stations
+  networkCache = b.network
+  communitiesCache = b.communities
+  modelsCache = b.models
+  offendersCache = b.offenders
+  flowsCache = b.flows
+  alertsCache = b.alerts
+  riskCache = b.riskScores
+  anomaliesCache = b.anomalies
+  categorySeriesCache = b.categorySeries
+  districtSeriesCache = b.districtSeries
+  NOW = b.now
+  PERIOD_DAYS = b.periodDays
+  adjacency = null
+}
+
+export async function loadPlatformData(): Promise<void> {
+  if (!ready) {
+    ready = apiGet<Bootstrap>('/api/bootstrap')
+      .then(hydrate)
+      .catch((err) => {
+        ready = null
+        throw err
+      })
+  }
+  return ready
+}
 
 export async function getDistricts(): Promise<DistrictMetrics[]> {
-  return settle(getDistrictMetrics())
+  await loadPlatformData()
+  return districtsCache
+}
+
+export async function getIncidents(): Promise<Incident[]> {
+  await loadPlatformData()
+  return incidentsCache
+}
+
+export async function getStations(): Promise<StationMetrics[]> {
+  await loadPlatformData()
+  return stationsCache
 }
 
 export async function getIncidentsFiltered(filter: IncidentFilter = {}): Promise<Incident[]> {
@@ -82,166 +191,212 @@ export async function getIncidentsFiltered(filter: IncidentFilter = {}): Promise
 }
 
 export async function getGraph(rootId?: string, depth = 2): Promise<GraphData> {
-  return settle(rootId ? getEgoNetwork(rootId, depth) : getNetwork())
+  return apiGet<GraphData>('/api/graph', { rootId, depth })
 }
 
 export async function getTimeSeries(category: CrimeCategory, district?: string): Promise<TrendSeries> {
-  return settle(district ? getDistrictSeries(district, category) : getCategorySeries(category))
+  await loadPlatformData()
+  if (district) return getDistrictSeries(district, category)
+  return getCategorySeries(category)
 }
 
 export async function getModels(): Promise<ModelCard[]> {
-  return settle(getModelCards())
-}
-
-/* ── Model outputs, with evidence ──────────────────────────────────────────── */
-
-/**
- * Recompute the risk score's feature contributions.
- *
- * These are the same four terms `districts.ts` sums to produce the score, read
- * back out and labelled. That matters: the drivers shown to an investigator are
- * the actual arithmetic behind the number, not a plausible-looking explanation
- * generated alongside it. A real deployment substitutes SHAP values from the
- * gradient-boosted model here; the display contract does not change.
- */
-function driversFor(d: DistrictMetrics): RiskScore['drivers'] {
-  const rateTerm = Math.min(1, (d.rate - 95) / 520) * 0.42
-  const urbanTerm = (d.urbanPct / 100) * 0.24
-  const trendTerm = Math.min(1, Math.max(0, (d.trend + 0.12) / 0.34)) * 0.26
-  const litTerm = (1 - d.literacyPct / 100) * 0.18
-
-  return [
-    { feature: `Incident rate — ${d.rate} per 100k`, contribution: rateTerm },
-    { feature: `Period-on-period change — ${(d.trend * 100).toFixed(1)}%`, contribution: trendTerm },
-    { feature: `Urbanisation — ${d.urbanPct.toFixed(1)}%`, contribution: urbanTerm },
-    { feature: `Literacy (inverse) — ${d.literacyPct.toFixed(1)}%`, contribution: litTerm },
-  ].sort((a, b) => b.contribution - a.contribution)
+  await loadPlatformData()
+  return modelsCache
 }
 
 export async function getRiskScores(): Promise<RiskScore[]> {
-  const districts = getDistrictMetrics()
-  const incidents = await getIncidents()
-
-  return districts
-    .map((d) => {
-      const top = incidents
-        .filter((i) => i.district === d.name)
-        .sort((a, b) => b.at - a.at)
-        .slice(0, 4)
-
-      const evidence: Evidence[] = [
-        ...top.map<Evidence>((i) => ({
-          kind: 'incident',
-          ref: i.id,
-          label: i.docket,
-          detail: `${i.category} · ${i.station} · ${shortDate(new Date(i.at))}`,
-        })),
-        {
-          kind: 'series',
-          ref: `${d.name}:trend`,
-          label: 'Category trend series',
-          detail: `${d.incidents.toLocaleString('en-IN')} records over the 180-day window`,
-        },
-        {
-          kind: 'feature',
-          ref: `${d.name}:census`,
-          label: 'Census 2011 indicators',
-          detail: `Urban ${d.urbanPct}% · Literacy ${d.literacyPct}% · Population ${d.population.toLocaleString('en-IN')}`,
-        },
-      ]
-
-      return {
-        district: d.name,
-        // §7.3 asks for a RELATIVE risk score per jurisdiction, and relative is
-        // what the whole platform displays: the map, the bars and the band all
-        // colour from `riskNorm`. Reporting the raw model output here while
-        // colouring from the rank meant the headline count ("1 high or
-        // critical") contradicted the bars directly beneath it. One value now
-        // drives the number, the band and the colour; the raw model terms stay
-        // visible in the drivers below.
-        score: d.riskNorm,
-        band: riskBand(d.riskNorm),
-        drivers: driversFor(d),
-        evidence,
-        horizonDays: 30,
-      }
-    })
-    .sort((a, b) => b.score - a.score)
+  await loadPlatformData()
+  return riskCache
 }
 
 export async function getAnomalies(limit = 24): Promise<AnomalyFlag[]> {
-  const incidents = await getIncidents()
-  const flagged = incidents.filter((i) => i.anomaly).sort((a, b) => b.anomalyScore - a.anomalyScore)
+  await loadPlatformData()
+  return anomaliesCache.slice(0, limit)
+}
 
-  return flagged.slice(0, limit).map((i) => {
-    const r = seeded(`anomaly:${i.id}`)
-    const reasons = [
-      `Offence window ${i.mo.timing} is atypical for ${i.category} in this jurisdiction`,
-      `Entry method "${i.mo.entry}" rare for ${i.mo.target} in ${i.district}`,
-      `Target profile deviates from the station's recorded pattern`,
-      `Combination of tools and timing not seen in the preceding 90 days`,
-    ]
-    return {
-      id: `ANM-${i.id}`,
-      incidentId: i.id,
-      district: i.district,
-      score: i.anomalyScore,
-      reason: reasons[Math.floor(r() * reasons.length)],
-      at: i.at,
-      evidence: [
-        { kind: 'incident', ref: i.id, label: i.docket, detail: i.narrative },
-        {
-          kind: 'feature',
-          ref: `${i.id}:mo`,
-          label: 'MO feature vector',
-          detail: `${i.mo.entry} · ${i.mo.target} · ${i.mo.timing} · ${i.mo.tools}`,
-        },
-        {
-          kind: 'feature',
-          ref: `${i.id}:baseline`,
-          label: 'Jurisdiction baseline',
-          detail: `${i.station} — compared against 90 days of recorded ${i.category} incidents`,
-        },
-      ],
+export function getDistrictMetrics(): DistrictMetrics[] {
+  return districtsCache
+}
+
+export function stateTotals() {
+  return stateTotalsCache ?? buildStateTotals(districtsCache)
+}
+
+export function volumeScale(): (n: number) => number {
+  const all = getDistrictMetrics().map((d) => d.incidents)
+  const max = Math.max(0, ...all)
+  const min = Math.min(...all, 0)
+  return (n) => Math.sqrt((n - min) / (max - min || 1))
+}
+
+export function getNetwork(): GraphData {
+  return networkCache
+}
+
+export function getCommunities() {
+  return communitiesCache
+}
+
+export function getModelCards(): ModelCard[] {
+  return modelsCache
+}
+
+export function getCategorySeries(cat: CrimeCategory): TrendSeries {
+  return (
+    categorySeriesCache[cat] ?? {
+      key: cat,
+      label: cat,
+      points: [],
+      controlLimit: 0,
+      breaches: [],
     }
-  })
+  )
 }
 
-export { NOW }
-
-
-/* ── The UI's surface ───────────────────────────────────────────────────────
- *
- * Re-exported here rather than imported from the generators directly, so that
- * this file is in fact the boundary the README says it is. Grouped by what a
- * backend implementer has to do with each.
- * ───────────────────────────────────────────────────────────────────────── */
-
-/** Warm every cache the synchronous accessors below depend on. */
-export async function loadPlatformData(): Promise<void> {
-  await Promise.all([getIncidents(), getStations()])
+export function getDistrictSeries(district: string, cat: CrimeCategory): TrendSeries {
+  return (
+    districtSeriesCache[`${district}|${cat}`] ?? {
+      key: `${district}:${cat}`,
+      label: `${district} — ${cat}`,
+      points: [],
+      controlLimit: 0,
+      breaches: [],
+    }
+  )
 }
 
-/* Reference data — fixed figures, no backend call needed. */
-export { CENSUS_2011, KARNATAKA_STATIONS } from './census'
-export { PERIOD_DAYS } from './districts'
+export function getActiveAlerts(withinWeeks = 10): AlertItem[] {
+  if (!alertsCache.length) return []
+  const maxAt = Math.max(...alertsCache.map((a) => a.at))
+  const windowMs = withinWeeks * 7 * 864e5
+  return alertsCache.filter((a) => maxAt - a.at <= windowMs)
+}
 
-/* Synchronous accessors — cache reads, used inside the render path. */
-export { getDistrictMetrics, stateTotals, volumeScale } from './districts'
-export { getNetwork, getCommunities } from './network'
-export { getModelCards, DRIFT_THRESHOLD } from './models'
-export { getCategorySeries, getDistrictSeries, getActiveAlerts } from './timeseries'
-export { getOffenderProfiles } from './offenders'
-export { peekStations } from './stations'
-export { getDistrictFlows, linkedDistricts, communityDistricts } from './flows'
+export function getOffenderProfiles(): OffenderProfile[] {
+  return offendersCache
+}
 
-/* Analysis — pure functions over the graph (§7.2). */
-export { shortestPath, commonNeighbours, suggestedOrigins, edgeLabel } from './graphpaths'
+export function peekStations(district?: string): StationMetrics[] {
+  return district ? stationsCache.filter((s) => s.district === district) : stationsCache
+}
 
-/* Async loaders. */
-export { getIncidents, getStations }
+export function getDistrictFlows(minTies = 2): FlowAggregate {
+  if (flowsCache && flowsCache.minTies === minTies) return flowsCache
+  return (
+    flowsCache ?? {
+      flows: [],
+      hubs: [],
+      droppedPairs: 0,
+      droppedTies: 0,
+      totalCrossTies: 0,
+      minTies,
+    }
+  )
+}
 
-export type { OffenderProfile } from './offenders'
-export type { StationMetrics } from './stations'
-export type { PathResult, PathLink } from './graphpaths'
-export type { DistrictFlow, DistrictHub } from './flows'
+export function linkedDistricts(district: string, minTies = 2): Set<string> {
+  const out = new Set<string>()
+  for (const f of getDistrictFlows(minTies).flows) {
+    if (f.a === district) out.add(f.b)
+    if (f.b === district) out.add(f.a)
+  }
+  return out
+}
+
+export function communityDistricts(community: number): Set<string> {
+  const out = new Set<string>()
+  for (const n of getNetwork().nodes) {
+    if (n.community === community) out.add(n.district)
+  }
+  return out
+}
+
+function getAdjacency() {
+  if (adjacency) return adjacency
+  const { nodes, edges } = getNetwork()
+  const neighbours = new Map<string, { id: string; edge: GraphEdge }[]>()
+  for (const n of nodes) neighbours.set(n.id, [])
+  for (const e of edges) {
+    neighbours.get(e.source)?.push({ id: e.target, edge: e })
+    neighbours.get(e.target)?.push({ id: e.source, edge: e })
+  }
+  adjacency = { neighbours, byId: new Map(nodes.map((n) => [n.id, n])) }
+  return adjacency
+}
+
+export function shortestPath(from: string, to: string): PathResult | null {
+  if (!from || !to || from === to) return null
+  const { neighbours, byId } = getAdjacency()
+  if (!byId.has(from) || !byId.has(to)) return null
+
+  const parent = new Map<string, { id: string; edge: GraphEdge } | null>([[from, null]])
+  const queue = [from]
+  while (queue.length) {
+    const id = queue.shift()!
+    if (id === to) break
+    for (const n of neighbours.get(id) ?? []) {
+      if (parent.has(n.id)) continue
+      parent.set(n.id, { id, edge: n.edge })
+      queue.push(n.id)
+    }
+  }
+  if (!parent.has(to)) return null
+
+  const chain: string[] = []
+  const links: PathLink[] = []
+  let cursor: string | null = to
+  while (cursor) {
+    chain.unshift(cursor)
+    const step = parent.get(cursor)
+    if (!step) break
+    links.unshift({
+      from: step.id,
+      to: cursor,
+      kind: step.edge.kind,
+      predicted: !!step.edge.predicted,
+    })
+    cursor = step.id
+  }
+  const direct = (neighbours.get(from) ?? []).some((n) => n.id === to)
+  return {
+    nodes: chain.map((id) => byId.get(id)!),
+    links,
+    hops: chain.length - 1,
+    indirect: !direct,
+  }
+}
+
+export function commonNeighbours(a: string, b: string): GraphNode[] {
+  if (!a || !b || a === b) return []
+  const { neighbours, byId } = getAdjacency()
+  const setA = new Set((neighbours.get(a) ?? []).map((n) => n.id))
+  return (neighbours.get(b) ?? [])
+    .filter((n) => setA.has(n.id))
+    .map((n) => byId.get(n.id)!)
+    .filter(Boolean)
+}
+
+export function suggestedOrigins(limit = 10): GraphNode[] {
+  return [...getNetwork().nodes]
+    .filter((n) => n.kind === 'Person')
+    .sort((a, b) => b.centrality - a.centrality)
+    .slice(0, limit)
+}
+
+export function edgeLabel(kind: EdgeKind): string {
+  return kind.replace(/_/g, ' ').toLowerCase()
+}
+
+/** Log evidence-drawer opens — §10.1 */
+export async function logAudit(action: string, resourceRefs: string[], detail = ''): Promise<void> {
+  try {
+    await fetch(`${BASE}/api/audit`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action, resource_refs: resourceRefs, detail }),
+    })
+  } catch {
+    /* non-blocking */
+  }
+}

@@ -4,6 +4,9 @@
   "version": "1.0.0",
   "type": "module",
   "description": "YUKTI — Yielding Unified Karnataka Trend Intelligence Platform",
+  "engines": {
+    "node": ">=20"
+  },
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",

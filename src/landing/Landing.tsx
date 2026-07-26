@@ -1,5 +1,6 @@
-import { useEffect, useMemo } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
+import { loadPlatformData } from '@/data/api'
 import { Scene } from '@/three/Scene'
 import { resetSceneClock } from '@/three/clock'
 import { useGeo } from '@/three/useGeo'
@@ -33,6 +34,11 @@ export function Landing() {
   const { features, incidents, ready, error } = useGeo()
   const selectDistrict = useYukti((s) => s.selectDistrict)
   const selectNode = useYukti((s) => s.selectNode)
+  const [dataEpoch, setDataEpoch] = useState(0)
+
+  useEffect(() => {
+    void loadPlatformData().then(() => setDataEpoch((n) => n + 1))
+  }, [])
 
   useEffect(() => {
     resetSceneClock(prefersReducedMotion() ? 1 : 0)
@@ -88,7 +94,7 @@ export function Landing() {
 
       {/* Scroll track. Each act owns a full viewport; the extra height at the
           end gives Act III room to complete its morph before the page bottoms. */}
-      <main className="relative z-10">
+      <main className="relative z-10" key={dataEpoch}>
         <section aria-label="YUKTI">
           <ActOne opacity={actOne} />
         </section>

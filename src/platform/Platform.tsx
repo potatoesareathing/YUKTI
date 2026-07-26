@@ -1,5 +1,5 @@
 import { loadPlatformData, stateTotals } from '@/data/api'
-import { useEffect, useMemo } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { Scene } from '@/three/Scene'
 import { resetSceneClock } from '@/three/clock'
@@ -31,17 +31,15 @@ export function Platform() {
   const navigate = useNavigate()
   const active: ModuleId = ID_BY_SLUG[slug ?? ''] ?? 'MOD-01'
   const meta = MODULE_BY_ID.get(active)!
+  const [dataEpoch, setDataEpoch] = useState(0)
 
   const { features, incidents, ready, error } = useGeo()
   const selectDistrict = useYukti((s) => s.selectDistrict)
-  const totals = useMemo(() => stateTotals(), [])
+  const totals = useMemo(() => stateTotals(), [dataEpoch])
 
   useEffect(() => {
     resetSceneClock(1)
-    // Warm the caches the synchronous accessors read from. Without this a
-    // module that calls one before its own loader has resolved reads an empty
-    // array and renders as though there were no data.
-    void loadPlatformData()
+    void loadPlatformData().then(() => setDataEpoch((n) => n + 1))
   }, [])
 
   // Keyboard access to the modules: 1–6 jump between them, matching the
@@ -81,7 +79,7 @@ export function Platform() {
           </div>
         )}
 
-        <div className={`relative z-10 h-full pb-6 ${usesScene ? 'pointer-events-none' : 'overflow-y-auto'}`}>
+        <div className={`relative z-10 h-full pb-6 ${usesScene ? 'pointer-events-none' : 'overflow-y-auto'}`} key={dataEpoch}>
           {active === 'MOD-01' && <M1Geospatial ready={ready} onPick={selectDistrict} />}
           {active === 'MOD-02' && <M2Network ready={ready} />}
           {active === 'MOD-03' && <M3Predictive />}

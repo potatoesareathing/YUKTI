@@ -1,0 +1,134 @@
+# YUKTI production / full-infra stack
+services:
+  postgres:
+    image: postgis/postgis:16-3.4
+    environment:
+      POSTGRES_USER: yukti
+      POSTGRES_PASSWORD: yukti
+      POSTGRES_DB: yukti
+    ports:
+      - "5432:5432"
+    volumes:
+      - yukti_pg:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U yukti -d yukti"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+
+  redis:
+    image: redis:7-alpine
+    command: redis-server --maxmemory 512mb --maxmemory-policy allkeys-lru --save ""
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  neo4j:
+    image: neo4j:5.26-community
+    environment:
+      NEO4J_AUTH: neo4j/yuktipassword
+      NEO4J_PLUGINS: '["apoc"]'
+      NEO4J_server_memory_heap_initial__size: 512m
+      NEO4J_server_memory_heap_max__size: 1G
+    ports:
+      - "7474:7474"
+      - "7687:7687"
+    volumes:
+      - yukti_neo4j:/data
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:7474 || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+
+  mlflow:
+    image: ghcr.io/mlflow/mlflow:v2.19.0
+    command: >
+      mlflow server
+      --host 0.0.0.0
+      --port 5000
+      --backend-store-uri sqlite:///mlflow.db
+      --default-artifact-root /mlflow/artifacts
+    ports:
+      - "5001:5000"
+    volumes:
+      - yukti_mlflow:/mlflow
+
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.0
+    command: start-dev --import-realm
+    environment:
+      KEYCLOAK_ADMIN: admin
+      KEYCLOAK_ADMIN_PASSWORD: admin
+      KC_HTTP_PORT: 8080
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./keycloak/realm-yukti.json:/opt/keycloak/data/import/realm-yukti.json:ro
+
+  api:
+    build: .
+    ports:
+      - "8000:8000"
+    environment:
+      ENVIRONMENT: production
+      DATABASE_URL: postgresql+psycopg2://yukti:yukti@postgres:5432/yukti
+      REDIS_URL: redis://redis:6379/0
+      NEO4J_URI: bolt://neo4j:7687
+      NEO4J_USER: neo4j
+      NEO4J_PASSWORD: yuktipassword
+      MLFLOW_TRACKING_URI: http://mlflow:5000
+      KEYCLOAK_ISSUER: http://localhost:8080/realms/yukti
+      AUTH_BYPASS: "true"
+      AUDIT_READS: "false"
+      DB_POOL_SIZE: "15"
+      DB_MAX_OVERFLOW: "30"
+      CORS_ORIGINS: "http://localhost:5173,http://127.0.0.1:5173"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      neo4j:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/ready', timeout=5)\""]
+      interval: 15s
+      timeout: 10s
+      retries: 10
+      start_period: 180s
+    command: >
+      sh -c "python -m app.seed.run_seed &&
+             python -m app.jobs.nightly &&
+             uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 2 --timeout-keep-alive 30"
+
+  # Optional scheduled re-publish (Airflow-shaped nightly without Airflow UI)
+  nightly:
+    build: .
+    profiles: ["jobs"]
+    environment:
+      DATABASE_URL: postgresql+psycopg2://yukti:yukti@postgres:5432/yukti
+      REDIS_URL: redis://redis:6379/0
+      NEO4J_URI: bolt://neo4j:7687
+      NEO4J_USER: neo4j
+      NEO4J_PASSWORD: yuktipassword
+      MLFLOW_TRACKING_URI: http://mlflow:5000
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    command: python -m app.jobs.nightly
+
+volumes:
+  yukti_pg:
+  yukti_neo4j:
+  yukti_mlflow:

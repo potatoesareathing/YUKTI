@@ -1,0 +1,17 @@
+fastapi==0.115.6
+uvicorn[standard]==0.34.0
+sqlalchemy==2.0.36
+psycopg2-binary==2.9.10
+redis==5.2.1
+neo4j==5.27.0
+pydantic==2.10.4
+pydantic-settings==2.7.0
+python-jose[cryptography]==3.3.0
+httpx==0.28.1
+numpy==2.2.1
+scipy==1.14.1
+statsmodels==0.14.4
+scikit-learn==1.6.0
+networkx==3.4.2
+python-multipart==0.0.20
+PyJWT==2.10.1

@@ -6,3 +6,11 @@ dist
 .shots
 tsconfig.app.tsbuildinfo
 tsconfig.node.tsbuildinfo
+.env
+.env.local
+backend/.venv/
+backend/yukti.db
+backend/lib/
+backend/__pycache__/
+**/__pycache__/
+*.pyc
