@@ -3,11 +3,11 @@ import { Panel, Stat, Bar, RiskPill, DecisionSupportNote, Field } from '@/ui/pri
 import { CorrelationScatter, RankedBars } from '@/ui/charts'
 import { useEvidence } from '@/ui/EvidenceDrawer'
 import { useYukti } from '@/store/useYukti'
-import { getRiskScores } from '@/data/api'
+import { getAnomalies, getRiskScores } from '@/data/api'
 import { getDistrictMetrics } from '@/data/districts'
 import { BAND_LABEL, PALETTE, riskCss } from '@/lib/palette'
-import { delta, inr, pct } from '@/lib/format'
-import type { RiskScore } from '@/data/types'
+import { delta, inr, pct, shortDate } from '@/lib/format'
+import type { AnomalyFlag, RiskScore } from '@/data/types'
 
 /**
  * MOD-03 — Sociological & AI-Driven Predictive Dashboards (§7.3).
@@ -29,6 +29,7 @@ const OVERLAY: Record<Overlay, { label: string; axis: string }> = {
 
 export function M3Predictive() {
   const [scores, setScores] = useState<RiskScore[]>([])
+  const [anomalies, setAnomalies] = useState<AnomalyFlag[]>([])
   const [overlay, setOverlay] = useState<Overlay>('urbanPct')
   const selected = useYukti((s) => s.selectedDistrict)
   const selectDistrict = useYukti((s) => s.selectDistrict)
@@ -40,6 +41,12 @@ export function M3Predictive() {
     let live = true
     getRiskScores().then((s) => {
       if (live) setScores(s)
+    })
+    // §7.3 lists anomaly call-outs as part of THIS module, not only as a model
+    // in MOD-06: incidents whose profile deviates from their jurisdiction's
+    // norm are what a strategic dashboard has to put in front of leadership.
+    getAnomalies(8).then((a) => {
+      if (live) setAnomalies(a)
     })
     return () => {
       live = false
@@ -73,14 +80,19 @@ export function M3Predictive() {
         <Panel title="Relative risk · next 30 days" reference="SEC 7.3" ticked>
           <div className="grid grid-cols-2 gap-4 p-3 sm:grid-cols-4">
             <Stat label="Districts scored" value={String(scores.length)} />
-            <Stat label="High or critical" value={String(critical)} tone="brass" />
             <Stat
-              label="Top district"
+              label="High or critical"
+              value={String(critical)}
+              tone={critical ? 'alert' : 'brass'}
+              sub="Relative to the state"
+            />
+            <Stat
+              label="Highest"
               value={scores[0].district}
               size="sm"
-              sub={`${(scores[0].score * 100).toFixed(0)} / 100`}
+              sub={`${(scores[0].score * 100).toFixed(0)} of 100`}
             />
-            <Stat label="Horizon" value="30 days" sub="Retrained quarterly" />
+            <Stat label="Anomalies flagged" value={String(anomalies.length)} tone="cool" sub="For review" />
           </div>
           <div className="border-t border-rule p-3">
             <DecisionSupportNote />
@@ -156,7 +168,7 @@ export function M3Predictive() {
                   {(focus.score * 100).toFixed(0)}
                 </div>
                 <div className="label mt-1" style={{ fontSize: 9 }}>
-                  of 100 · {focus.horizonDays}-day horizon
+                  of 100 · relative · {focus.horizonDays}-day horizon
                 </div>
               </div>
               <RiskPill score={focus.score} band={BAND_LABEL[focus.band]} />
@@ -190,6 +202,54 @@ export function M3Predictive() {
               Show the {focus.evidence.length} records behind this score
             </button>
           </div>
+        </Panel>
+
+        <Panel title="Anomaly call-outs" reference="SEC 7.3" scroll>
+          <div className="border-b border-rule px-3 py-2">
+            <p className="text-[0.74rem] leading-relaxed text-khaki-dim">
+              Incidents whose feature profile departs from their jurisdiction's recorded pattern.
+              Flagged for review, never actioned automatically.
+            </p>
+          </div>
+          {anomalies.length ? (
+            <ul className="divide-y divide-rule/50">
+              {anomalies.map((a) => (
+                <li key={a.id}>
+                  <button
+                    onClick={() =>
+                      openEvidence({
+                        title: a.evidence[0]?.label ?? a.id,
+                        subtitle: `Anomaly score ${pct(a.score, 0)} · ${a.district} · Isolation Forest`,
+                        items: a.evidence,
+                      })
+                    }
+                    className="w-full px-3 py-2.5 text-left transition-colors hover:bg-brass/[0.06]"
+                  >
+                    <div className="mb-1 flex items-baseline justify-between gap-2">
+                      <span className="text-[0.78rem] text-khaki">{a.district}</span>
+                      <span
+                        className="tnum shrink-0"
+                        style={{
+                          fontSize: 10,
+                          color: a.score > 0.85 ? PALETTE.redzone : PALETTE.brass,
+                        }}
+                      >
+                        {pct(a.score, 0)}
+                      </span>
+                    </div>
+                    <p className="mb-1 text-[0.75rem] leading-snug text-khaki-dim">{a.reason}</p>
+                    <span className="label" style={{ fontSize: 9 }}>
+                      {shortDate(new Date(a.at))} · tap for the record
+                    </span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <div className="p-4">
+              <p className="text-[0.8rem] text-khaki-dim">No incidents outside the norm.</p>
+            </div>
+          )}
         </Panel>
 
         <DistrictContext name={focus.district} />

@@ -138,8 +138,15 @@ export async function getRiskScores(): Promise<RiskScore[]> {
 
       return {
         district: d.name,
-        score: d.risk,
-        band: riskBand(d.risk),
+        // §7.3 asks for a RELATIVE risk score per jurisdiction, and relative is
+        // what the whole platform displays: the map, the bars and the band all
+        // colour from `riskNorm`. Reporting the raw model output here while
+        // colouring from the rank meant the headline count ("1 high or
+        // critical") contradicted the bars directly beneath it. One value now
+        // drives the number, the band and the colour; the raw model terms stay
+        // visible in the drivers below.
+        score: d.riskNorm,
+        band: riskBand(d.riskNorm),
         drivers: driversFor(d),
         evidence,
         horizonDays: 30,
