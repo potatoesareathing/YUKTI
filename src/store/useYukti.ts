@@ -42,8 +42,15 @@ interface YuktiState {
   setPathTo: (id: string | null) => void
   clearPath: () => void
 
-  /* Filters — shared by every module, so a filter set in MOD-01 still holds
-     when the analyst moves to MOD-04. */
+  /*
+   * Crime-category filter. Currently read only by MOD-01.
+   *
+   * This once claimed to be shared across every module. It is not: MOD-04 has
+   * its own single-category selector and ignores this entirely, so a filter set
+   * on the map does not follow the analyst to the trend view. Left here as the
+   * intended home for a shared filter, but do not rely on it being applied
+   * anywhere except MOD-01 until the other modules actually read it.
+   */
   categories: CrimeCategory[]
   toggleCategory: (c: CrimeCategory) => void
   setCategories: (c: CrimeCategory[]) => void
