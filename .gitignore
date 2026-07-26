@@ -10,7 +10,12 @@ tsconfig.node.tsbuildinfo
 .env.local
 backend/.venv/
 backend/yukti.db
+backend/yukti.db-shm
+backend/yukti.db-wal
+backend/*.db
+backend/*.db-*
 backend/lib/
+backend/appsail-bundle.zip
 backend/__pycache__/
 **/__pycache__/
 *.pyc
