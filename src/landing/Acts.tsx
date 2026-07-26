@@ -163,7 +163,7 @@ export function ActTwo({ opacity }: ActProps) {
   return (
     <ActPanel
       opacity={opacity}
-      reference="SEC 7.1 · MOD-01 / MOD-04"
+      reference="MOD-01 · MOD-04"
       heading="Where, and when"
       body="Kernel density estimation over geo-tagged incidents, clustered by ST-DBSCAN and sliced by time of day. The contour bands mark where density climbs fastest — a tight band is a sharp edge to a hotspot, not a gradient."
       footnote="A CUSUM control chart on the STL residual decides when a jurisdiction becomes a red zone. Not a threshold on the raw count."
@@ -176,7 +176,7 @@ export function ActThree({ opacity }: ActProps) {
   return (
     <ActPanel
       opacity={opacity}
-      reference="SEC 7.2 · MOD-02 / MOD-05"
+      reference="MOD-02 · MOD-05"
       heading="And who, with whom"
       body="The same records, re-sorted by association instead of by place. Louvain community detection over a suspect–victim–location graph; PageRank ranks the people the network actually routes through."
       footnote="Brass edges are GraphSAGE link predictions — hypotheses to check, not records. The platform never shows the two the same way."

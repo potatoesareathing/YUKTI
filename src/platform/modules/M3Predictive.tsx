@@ -76,7 +76,7 @@ export function M3Predictive() {
   return (
     <div className="mx-auto grid max-w-[1500px] grid-cols-1 gap-3 p-3 xl:grid-cols-[minmax(0,1fr)_360px]">
       <div className="flex min-w-0 flex-col gap-3">
-        <Panel title="Relative risk · next 30 days" reference="SEC 7.3" ticked>
+        <Panel title="Relative risk · next 30 days" reference="Forecast" ticked>
           <div className="grid grid-cols-2 gap-4 p-3 sm:grid-cols-4">
             <Stat label="Districts scored" value={String(scores.length)} />
             <Stat
@@ -208,7 +208,7 @@ export function M3Predictive() {
           </div>
         </Panel>
 
-        <Panel title="Anomaly call-outs" reference="SEC 7.3" scroll>
+        <Panel title="Anomaly call-outs" reference="For review" scroll>
           <div className="border-b border-rule px-3 py-2">
             <p className="text-[0.74rem] leading-relaxed text-khaki-dim">
               Incidents whose feature profile departs from their jurisdiction's recorded pattern.

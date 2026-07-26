@@ -12,7 +12,6 @@ export interface ModuleMeta {
   short: string
   name: string
   kannada: string
-  reference: string
   purpose: string
   /** Whether this module drives the shared 3D scene. */
   scene: 'map' | 'graph' | 'none'
@@ -24,7 +23,6 @@ export const MODULES: ModuleMeta[] = [
     short: 'Geospatial',
     name: 'Advanced Visualisation & Geospatial Maps',
     kannada: 'ಭೂಪ್ರಾದೇಶಿಕ',
-    reference: 'SEC 7.1',
     purpose: 'District and station drill-down, spatiotemporal hotspots, emerging-trend alerts.',
     scene: 'map',
   },
@@ -33,7 +31,6 @@ export const MODULES: ModuleMeta[] = [
     short: 'Network',
     name: 'Criminological Network & Link Analysis',
     kannada: 'ಜಾಲ ವಿಶ್ಲೇಷಣೆ',
-    reference: 'SEC 7.2',
     purpose: 'Node-based relationship mapping, repeat-offender tracking, hidden associations.',
     scene: 'graph',
   },
@@ -42,7 +39,6 @@ export const MODULES: ModuleMeta[] = [
     short: 'Predictive',
     name: 'Sociological & AI-Driven Predictive Dashboards',
     kannada: 'ಮುನ್ಸೂಚನೆ',
-    reference: 'SEC 7.3',
     purpose: 'Socio-economic overlays, predictive risk scoring, anomaly call-outs.',
     scene: 'none',
   },
@@ -51,7 +47,6 @@ export const MODULES: ModuleMeta[] = [
     short: 'Trends',
     name: 'Pattern & Trend Discovery',
     kannada: 'ಪ್ರವೃತ್ತಿ',
-    reference: 'SEC 7.4',
     purpose: 'Statistical spatial and temporal analytics for resource deployment.',
     scene: 'none',
   },
@@ -60,7 +55,6 @@ export const MODULES: ModuleMeta[] = [
     short: 'Behaviour',
     name: 'Network & Behavioural Analysis',
     kannada: 'ವರ್ತನೆ',
-    reference: 'SEC 7.5',
     purpose: 'Suspect-network detection and recurring modus-operandi identification.',
     scene: 'none',
   },
@@ -69,7 +63,6 @@ export const MODULES: ModuleMeta[] = [
     short: 'Intelligence',
     name: 'AI/ML-Driven Intelligence',
     kannada: 'ಗುಪ್ತಚರ',
-    reference: 'SEC 7.6',
     purpose: 'Model portfolio, anomaly queue, hidden-correlation discovery.',
     scene: 'none',
   },

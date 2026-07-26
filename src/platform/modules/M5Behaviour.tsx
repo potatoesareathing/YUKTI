@@ -117,7 +117,7 @@ export function M5Behaviour() {
       <div className="flex min-w-0 flex-col gap-3">
         <Panel
           title={view === 'mo' ? 'Modus-operandi clusters' : 'Repeat offenders'}
-          reference="SEC 7.5"
+          reference="Method signatures"
           ticked
           action={
             <div className="flex gap-1">

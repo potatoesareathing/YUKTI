@@ -84,7 +84,7 @@ export function M4Trends() {
           <StlChart series={series} />
         </Panel>
 
-        <Panel title="How this works" reference="SEC 7.4">
+        <Panel title="How this works" reference="Method">
           <div className="grid grid-cols-1 gap-4 p-4 md:grid-cols-3">
             <Step
               n="Decompose"

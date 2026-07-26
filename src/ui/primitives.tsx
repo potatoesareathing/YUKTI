@@ -11,7 +11,7 @@ import { riskCss } from '@/lib/palette'
 
 interface PanelProps {
   title?: string
-  /** Document reference, e.g. "SEC 7.4". Shown right-aligned in the header. */
+  /** Short qualifier for the panel, e.g. "Forecast". Right-aligned in the header. */
   reference?: string
   action?: ReactNode
   children: ReactNode

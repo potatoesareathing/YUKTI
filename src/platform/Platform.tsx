@@ -93,7 +93,7 @@ export function Platform() {
 
       <InstrumentFrame
         compact
-        reference={`${meta.reference} · ${meta.id}`}
+        reference={`${meta.id} · ${meta.short.toUpperCase()}`}
         status={`${compact(totals.incidents)} RECORDS · SYNTHETIC`}
       />
 

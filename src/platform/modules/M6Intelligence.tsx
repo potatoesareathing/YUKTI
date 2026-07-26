@@ -47,7 +47,7 @@ export function M6Intelligence() {
   return (
     <div className="mx-auto grid max-w-[1500px] grid-cols-1 gap-3 p-3 xl:grid-cols-[minmax(0,1fr)_384px]">
       <div className="flex min-w-0 flex-col gap-3">
-        <Panel title="Model portfolio" reference="SEC 8" ticked>
+        <Panel title="Model portfolio" reference="Registry" ticked>
           <div className="grid grid-cols-2 gap-4 border-b border-rule p-3 sm:grid-cols-4">
             <Stat label="Models" value={String(models.length)} />
             <Stat label="Serving" value={String(serving)} tone="brass" />
@@ -144,7 +144,7 @@ export function M6Intelligence() {
           </ul>
         </Panel>
 
-        <Panel title="Governance" reference="SEC 8 · SEC 10.3">
+        <Panel title="Governance" reference="Policy">
           <div className="p-4">
             <DecisionSupportNote>
               Every prediction surfaced to an investigator links back to the records that produced it.
