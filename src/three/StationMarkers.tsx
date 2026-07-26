@@ -4,7 +4,7 @@ import { Html } from '@react-three/drei'
 import { ConeGeometry, Color, Object3D, type InstancedMesh } from 'three'
 import { PALETTE } from '@/lib/palette'
 import { compact } from '@/lib/format'
-import type { StationMetrics } from '@/data/stations'
+import type { StationMetrics } from '@/data/api'
 import { useYukti } from '@/store/useYukti'
 
 /**

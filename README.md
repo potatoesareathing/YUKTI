@@ -31,11 +31,13 @@ served from `public/`.
 | `/` | Three-act scroll narrative |
 | `/?act=hotspots` · `/?act=network` | Deep-link into an act |
 | `/?p=0.5` | Pin the narrative to a fixed point (screenshots, demos) |
-| `/platform/geospatial` | MOD-01 — 3D map, hotspots, drill-down |
-| `/platform/network` | MOD-02 — 3D link analysis |
-| `/platform/predictive` | MOD-03 — risk scoring, socio-economic overlays |
+| `/platform/geospatial` | MOD-01 — 3D map, hotspots, state→district→station drill-down |
+| `…?district=Bengaluru Urban&station=0` | Open a drill-down tier directly |
+| `/platform/network` | MOD-02 — live force graph, hover spotlight |
+| `…?node=3` · `…?path=4` | Select an entity · trace a shortest path |
+| `/platform/predictive` | MOD-03 — risk scoring, socio-economic overlay, anomaly call-outs |
 | `/platform/trends` | MOD-04 — STL decomposition, CUSUM alerts |
-| `/platform/behaviour` | MOD-05 — MO similarity clusters |
+| `/platform/behaviour` | MOD-05 — MO clusters, and `?view=offenders` for repeat-offender profiles |
 | `/platform/intelligence` | MOD-06 — model portfolio, anomaly queue |
 
 Keys **1–6** switch modules. **Esc** closes the evidence drawer.
@@ -58,6 +60,23 @@ getRiskScores()           → RiskScore[]         // gradient-boosted model serv
 getAnomalies(limit)       → AnomalyFlag[]       // Isolation Forest serving endpoint
 getModels()               → ModelCard[]         // MLflow registry
 ```
+
+### The boundary is enforced, not just documented
+
+Nothing under `src/platform`, `src/landing` or `src/three` imports a data module
+directly — every one of them imports from `api.ts`. That is checkable:
+
+```bash
+grep -rn "from '@/data/" src/platform src/landing src/three | grep -v "data/\(api\|types\)'"
+# → no output
+```
+
+Two shapes are exported, and the difference matters when wiring a real backend:
+
+- **async** — the natural contract. Replace with a fetch and the UI is unchanged.
+- **sync** — accessors the render path calls inside `useMemo`. They read from a
+  cache that `loadPlatformData()` warms on mount. To back these with a network
+  call, hydrate the cache in that loader and keep the accessors synchronous.
 
 ### Two contracts worth keeping
 
@@ -94,7 +113,7 @@ src/
   lib/          projection & extrusion (geo.ts), palette, seeded RNG, formatting
   data/         types (§9) · census · generators · api.ts ← the swap point
   store/        Zustand — selection, filters, layers, evidence drawer
-  three/        Canvas, Districts, HotspotLayer, NetworkGraph, CameraRig, clock
+  three/        Canvas, Districts, HotspotLayer, GraphView, StationMarkers, CameraRig, clock
   landing/      three-act scroll narrative over one continuous scene
   platform/     shell + six modules
   ui/           primitives, charts, instrument frame, evidence drawer

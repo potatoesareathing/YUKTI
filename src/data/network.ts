@@ -2,7 +2,7 @@ import { pick, randInt, seeded, type Rng } from '@/lib/rng'
 import { docket } from '@/lib/format'
 import { getDistrictMetrics, NOW, PERIOD_DAYS } from './districts'
 import { MO_VOCAB } from './incidents'
-import type { EdgeKind, GraphData, GraphEdge, GraphNode, NodeKind } from './types'
+import type { EdgeKind, GraphData, GraphEdge, GraphNode } from './types'
 
 /**
  * The suspect–victim–location graph behind MOD-02 and MOD-05.
@@ -375,4 +375,3 @@ export function getCommunities(): { id: number; label: string; size: number; dis
     .sort((a, b) => b.size - a.size)
 }
 
-export const NODE_KINDS: NodeKind[] = ['Person', 'Incident', 'Location', 'Vehicle', 'Organisation']

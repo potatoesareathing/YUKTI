@@ -1,7 +1,6 @@
+import { KARNATAKA_STATIONS, stateTotals } from '@/data/api'
 import { Link } from 'react-router-dom'
 import { compact, inr } from '@/lib/format'
-import { stateTotals } from '@/data/districts'
-import { KARNATAKA_STATIONS } from '@/data/census'
 
 /**
  * Act overlays.

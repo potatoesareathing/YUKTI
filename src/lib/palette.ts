@@ -70,16 +70,6 @@ export const BAND_LABEL: Record<RiskBand, string> = {
   critical: 'Critical',
 }
 
-/** Categorical series colours, for charts with more than one line. */
-export const SERIES = [
-  PALETTE.brass,
-  PALETTE.bhuvan,
-  '#9C7BB8',
-  '#6FAE7E',
-  '#D8845A',
-  PALETTE.khakiDim,
-] as const
-
 /** Entity-kind accents, used by the node inspector and the detail layer. */
 export const KIND_COLOR: Record<string, string> = {
   Organisation: PALETTE.brassLit,

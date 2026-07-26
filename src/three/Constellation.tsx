@@ -1,3 +1,4 @@
+import { communityDistricts, getDistrictFlows, getDistrictMetrics, getNetwork, linkedDistricts } from '@/data/api'
 import { useEffect, useMemo, useRef } from 'react'
 import { useFrame } from '@react-three/fiber'
 import { Line } from '@react-three/drei'
@@ -17,9 +18,6 @@ import {
 } from 'three'
 import { PALETTE, riskColor } from '@/lib/palette'
 import type { DistrictFeature } from '@/lib/geo'
-import { getDistrictMetrics } from '@/data/districts'
-import { communityDistricts, getDistrictFlows, linkedDistricts } from '@/data/flows'
-import { getNetwork } from '@/data/network'
 import type { GraphNode } from '@/data/types'
 import { useYukti } from '@/store/useYukti'
 

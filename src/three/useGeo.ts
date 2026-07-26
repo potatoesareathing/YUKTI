@@ -1,6 +1,6 @@
+import { getIncidents } from '@/data/api'
 import { useEffect, useState } from 'react'
 import { loadDistricts, type DistrictFeature } from '@/lib/geo'
-import { getIncidents } from '@/data/incidents'
 import type { Incident } from '@/data/types'
 
 interface GeoState {

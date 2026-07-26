@@ -3,6 +3,7 @@ import { riskBand } from '@/lib/palette'
 import { shortDate } from '@/lib/format'
 import { getDistrictMetrics, NOW } from './districts'
 import { getIncidents } from './incidents'
+import { getStations } from './stations'
 import { getNetwork, getEgoNetwork } from './network'
 import { getCategorySeries, getDistrictSeries } from './timeseries'
 import { getModelCards } from './models'
@@ -36,8 +37,21 @@ import type {
  *    getAnomalies    → model-serving endpoint for Isolation Forest output
  *    getModels       → MLflow registry
  *
- *  Every signature is already async and already returns the §9 domain types, so
- *  the swap is a re-implementation of this file — not a refactor of the UI.
+ *  THIS IS THE UI'S ONLY DOOR INTO THE DATA. Nothing under src/platform,
+ *  src/landing or src/three imports a data module directly — they all import
+ *  from here, so replacing this file genuinely replaces the data layer. An
+ *  earlier version documented that promise without enforcing it: twenty-eight
+ *  imports reached past this file straight into the generators, and swapping it
+ *  would have changed almost nothing on screen.
+ *
+ *  Two shapes are exported, and the difference matters when wiring a real
+ *  backend:
+ *
+ *    ASYNC  the natural contract — replace with a fetch and the UI is unchanged.
+ *    SYNC   accessors the render path calls inside useMemo. These read from a
+ *           cache and must be warm before use; `loadPlatformData()` warms it.
+ *           To back these with a network call, hydrate the cache in that loader
+ *           and keep the accessors synchronous.
  *
  *  CONTRACT NOTE: RiskScore and AnomalyFlag both carry a non-optional
  *  `evidence` array. §10.3 requires that a model output surfaced to an
@@ -194,3 +208,40 @@ export async function getAnomalies(limit = 24): Promise<AnomalyFlag[]> {
 }
 
 export { NOW }
+
+
+/* ── The UI's surface ───────────────────────────────────────────────────────
+ *
+ * Re-exported here rather than imported from the generators directly, so that
+ * this file is in fact the boundary the README says it is. Grouped by what a
+ * backend implementer has to do with each.
+ * ───────────────────────────────────────────────────────────────────────── */
+
+/** Warm every cache the synchronous accessors below depend on. */
+export async function loadPlatformData(): Promise<void> {
+  await Promise.all([getIncidents(), getStations()])
+}
+
+/* Reference data — fixed figures, no backend call needed. */
+export { CENSUS_2011, KARNATAKA_STATIONS } from './census'
+export { PERIOD_DAYS } from './districts'
+
+/* Synchronous accessors — cache reads, used inside the render path. */
+export { getDistrictMetrics, stateTotals, volumeScale } from './districts'
+export { getNetwork, getCommunities } from './network'
+export { getModelCards, DRIFT_THRESHOLD } from './models'
+export { getCategorySeries, getDistrictSeries, getActiveAlerts } from './timeseries'
+export { getOffenderProfiles } from './offenders'
+export { peekStations } from './stations'
+export { getDistrictFlows, linkedDistricts, communityDistricts } from './flows'
+
+/* Analysis — pure functions over the graph (§7.2). */
+export { shortestPath, commonNeighbours, suggestedOrigins, edgeLabel } from './graphpaths'
+
+/* Async loaders. */
+export { getIncidents, getStations }
+
+export type { OffenderProfile } from './offenders'
+export type { StationMetrics } from './stations'
+export type { PathResult, PathLink } from './graphpaths'
+export type { DistrictFlow, DistrictHub } from './flows'

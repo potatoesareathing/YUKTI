@@ -134,9 +134,6 @@ export function getDistrictMetrics(): DistrictMetrics[] {
   return cached
 }
 
-export function districtByName(name: string): DistrictMetrics | undefined {
-  return getDistrictMetrics().find((d) => d.name === name)
-}
 
 /** Normalise incident volume to 0..1 — drives extruded tower height. */
 export function volumeScale(): (n: number) => number {

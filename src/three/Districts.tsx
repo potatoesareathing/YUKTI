@@ -1,3 +1,4 @@
+import { getDistrictMetrics, volumeScale } from '@/data/api'
 import { useMemo, useRef } from 'react'
 import { useFrame } from '@react-three/fiber'
 import {
@@ -11,7 +12,6 @@ import {
 } from 'three'
 import type { DistrictFeature } from '@/lib/geo'
 import { PALETTE, riskColor } from '@/lib/palette'
-import { getDistrictMetrics, volumeScale } from '@/data/districts'
 import { useYukti } from '@/store/useYukti'
 import { sceneClock } from './clock'
 

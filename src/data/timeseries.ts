@@ -151,7 +151,7 @@ export function getDistrictSeries(district: string, cat: CrimeCategory): TrendSe
   return cache.get(key)!
 }
 
-export function getAllCategorySeries(): TrendSeries[] {
+function getAllCategorySeries(): TrendSeries[] {
   return CRIME_CATEGORIES.map(getCategorySeries)
 }
 
@@ -166,4 +166,3 @@ export function getActiveAlerts(withinWeeks = 10): { series: TrendSeries; at: nu
     .sort((a, b) => b.at - a.at)
 }
 
-export const SERIES_WEEKS = WEEKS

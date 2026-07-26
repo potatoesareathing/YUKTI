@@ -1,8 +1,8 @@
+import { NOW, PERIOD_DAYS } from '@/data/api'
 import { useMemo, useRef } from 'react'
 import { useFrame } from '@react-three/fiber'
 import { AdditiveBlending, BufferGeometry, Color, Float32BufferAttribute, ShaderMaterial } from 'three'
 import { PALETTE } from '@/lib/palette'
-import { NOW, PERIOD_DAYS } from '@/data/districts'
 import { sceneClock } from './clock'
 import type { Incident } from '@/data/types'
 

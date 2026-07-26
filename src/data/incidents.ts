@@ -239,21 +239,9 @@ export async function getIncidents(): Promise<Incident[]> {
   return cached
 }
 
-/** Synchronous access, valid only after `getIncidents` has resolved once. */
-export function peekIncidents(): Incident[] {
-  return cached ?? []
-}
 
-export function randomStation(district: string, r: Rng): string {
-  return `${district.split(' ')[0]} ${pick(r, STATION_SUFFIX)}`
-}
 
-export function randomOfficer(r: Rng): string {
-  return `${pick(r, OFFICER_RANK)} ${pick(r, OFFICER_NAME)}`
-}
 
-export const OFFICER_NAMES = OFFICER_NAME
-export const MO_SIGNATURES = SIGNATURES
 export const MO_VOCAB = {
   ENTRY: [...new Set(SIGNATURES.map((s) => s.entry))],
   TARGET: [...new Set(SIGNATURES.map((s) => s.target))],

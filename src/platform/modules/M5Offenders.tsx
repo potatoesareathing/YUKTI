@@ -1,7 +1,7 @@
 import { Field, Stat } from '@/ui/primitives'
 import { PALETTE } from '@/lib/palette'
 import { shortDate } from '@/lib/format'
-import type { OffenderProfile } from '@/data/offenders'
+import type { OffenderProfile } from '@/data/api'
 import type { Evidence } from '@/data/types'
 
 /**

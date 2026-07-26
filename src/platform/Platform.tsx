@@ -1,3 +1,4 @@
+import { loadPlatformData, stateTotals } from '@/data/api'
 import { useEffect, useMemo } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { Scene } from '@/three/Scene'
@@ -6,7 +7,6 @@ import { useGeo } from '@/three/useGeo'
 import { InstrumentFrame } from '@/ui/InstrumentFrame'
 import { EvidenceDrawer } from '@/ui/EvidenceDrawer'
 import { useYukti, type ModuleId } from '@/store/useYukti'
-import { stateTotals } from '@/data/districts'
 import { compact } from '@/lib/format'
 import { ID_BY_SLUG, MODULE_BY_ID, MODULES, SLUG_BY_ID } from './modules'
 import { DialScene, MapScene } from './PlatformScene'
@@ -38,6 +38,10 @@ export function Platform() {
 
   useEffect(() => {
     resetSceneClock(1)
+    // Warm the caches the synchronous accessors read from. Without this a
+    // module that calls one before its own loader has resolved reads an empty
+    // array and renders as though there were no data.
+    void loadPlatformData()
   }, [])
 
   // Keyboard access to the modules: 1–6 jump between them, matching the

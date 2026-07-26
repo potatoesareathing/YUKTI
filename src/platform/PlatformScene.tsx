@@ -1,3 +1,4 @@
+import { getStations, peekStations, type StationMetrics } from '@/data/api'
 import { useEffect, useMemo, useState } from 'react'
 import { useFrame } from '@react-three/fiber'
 import { CameraRig, STATIONS, stationFor, type CameraStation } from '@/three/CameraRig'
@@ -12,7 +13,6 @@ import { Rig } from '@/three/Scene'
 import { sceneClock } from '@/three/clock'
 import type { DistrictFeature } from '@/lib/geo'
 import type { Incident } from '@/data/types'
-import { getStations, peekStations, type StationMetrics } from '@/data/stations'
 import { useYukti, prefersReducedMotion } from '@/store/useYukti'
 
 /**

@@ -1,3 +1,4 @@
+import { getNetwork, shortestPath } from '@/data/api'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useFrame, useThree } from '@react-three/fiber'
 import { Html, OrbitControls } from '@react-three/drei'
@@ -21,8 +22,6 @@ import {
   type Mesh,
 } from 'three'
 import { KIND_COLOR, PALETTE } from '@/lib/palette'
-import { getNetwork } from '@/data/network'
-import { shortestPath } from '@/data/graphpaths'
 import type { GraphNode, NodeKind } from '@/data/types'
 import { useYukti } from '@/store/useYukti'
 

@@ -141,6 +141,3 @@ export function getOffenderProfiles(): OffenderProfile[] {
   return cache
 }
 
-export function getOffenderProfile(personId: string): OffenderProfile | undefined {
-  return getOffenderProfiles().find((p) => p.person.id === personId)
-}

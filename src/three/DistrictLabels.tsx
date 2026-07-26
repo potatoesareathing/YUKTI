@@ -1,9 +1,9 @@
+import { getDistrictMetrics, volumeScale } from '@/data/api'
 import { useMemo } from 'react'
 import { Html } from '@react-three/drei'
 import type { DistrictFeature } from '@/lib/geo'
 import { riskCss } from '@/lib/palette'
 import { compact } from '@/lib/format'
-import { getDistrictMetrics, volumeScale } from '@/data/districts'
 import { useYukti } from '@/store/useYukti'
 
 /**

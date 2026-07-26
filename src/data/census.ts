@@ -51,7 +51,5 @@ export const CENSUS_2011: CensusRow[] = [
   { name: 'Kodagu', population: 554519, urbanPct: 14.5, literacyPct: 82.6, stations: 15 },
 ]
 
-export const CENSUS_BY_NAME = new Map(CENSUS_2011.map((r) => [r.name, r]))
 
-export const KARNATAKA_POPULATION = CENSUS_2011.reduce((a, r) => a + r.population, 0)
 export const KARNATAKA_STATIONS = CENSUS_2011.reduce((a, r) => a + r.stations, 0)
