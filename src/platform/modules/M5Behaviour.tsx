@@ -4,8 +4,10 @@ import { RankedBars } from '@/ui/charts'
 import { useEvidence } from '@/ui/EvidenceDrawer'
 import { getIncidents } from '@/data/incidents'
 import { getCommunities } from '@/data/network'
+import { getOffenderProfiles, type OffenderProfile } from '@/data/offenders'
 import { PALETTE } from '@/lib/palette'
 import { shortDate } from '@/lib/format'
+import { OffenderPanel } from './M5Offenders'
 import type { Evidence, Incident, ModusOperandi } from '@/data/types'
 
 /**
@@ -41,6 +43,10 @@ export function M5Behaviour() {
   const [incidents, setIncidents] = useState<Incident[]>([])
   const [selected, setSelected] = useState<string | null>(null)
   const [crossOnly, setCrossOnly] = useState(true)
+  const [view, setView] = useState<'mo' | 'offenders'>(() =>
+    new URLSearchParams(window.location.search).get('view') === 'offenders' ? 'offenders' : 'mo',
+  )
+  const [offenderId, setOffenderId] = useState<string | null>(null)
   const openEvidence = useEvidence()
 
   useEffect(() => {
@@ -91,6 +97,10 @@ export function M5Behaviour() {
   const focus = shown.find((c) => c.key === selected) ?? shown[0]
 
   const communities = useMemo(() => getCommunities(), [])
+  const offenders = useMemo<OffenderProfile[]>(() => getOffenderProfiles(), [])
+  const offender = offenderId
+    ? offenders.find((o) => o.person.id === offenderId)
+    : offenders[0]
 
   if (!incidents.length) {
     return (
@@ -101,9 +111,41 @@ export function M5Behaviour() {
   }
 
   return (
-    <div className="mx-auto grid max-w-[1500px] grid-cols-1 gap-3 p-3 xl:grid-cols-[minmax(0,1fr)_380px]">
+    <div
+      className={`mx-auto grid max-w-[1500px] grid-cols-1 gap-3 p-3 ${
+        view === 'mo' ? 'xl:grid-cols-[minmax(0,1fr)_380px]' : ''
+      }`}
+    >
       <div className="flex min-w-0 flex-col gap-3">
-        <Panel title="Modus-operandi clusters" reference="SEC 7.5" ticked>
+        <Panel
+          title={view === 'mo' ? 'Modus-operandi clusters' : 'Repeat offenders'}
+          reference="SEC 7.5"
+          ticked
+          action={
+            <div className="flex gap-1">
+              {(['mo', 'offenders'] as const).map((v) => (
+                <button
+                  key={v}
+                  onClick={() => setView(v)}
+                  aria-pressed={view === v}
+                  className="label px-1.5 py-0.5 transition-colors"
+                  style={{ color: view === v ? PALETTE.brass : undefined }}
+                >
+                  {v === 'mo' ? 'By method' : 'By person'}
+                </button>
+              ))}
+            </div>
+          }
+        >
+          {view === 'offenders' ? (
+            <OffenderPanel
+              offenders={offenders}
+              selected={offender}
+              onSelect={setOffenderId}
+              onEvidence={openEvidence}
+            />
+          ) : (
+          <>
           <div className="grid grid-cols-2 gap-4 border-b border-rule p-3 sm:grid-cols-4">
             <Stat label="Clusters" value={String(clusters.length)} sub="≥ 4 incidents" />
             <Stat
@@ -163,6 +205,8 @@ export function M5Behaviour() {
               )
             })}
           </ul>
+          </>
+          )}
         </Panel>
 
         <Panel title="Known groups" reference="Louvain communities">
@@ -177,6 +221,7 @@ export function M5Behaviour() {
         </Panel>
       </div>
 
+      {view === 'mo' && (
       <div className="flex min-w-0 flex-col gap-3">
         {focus ? (
           <>
@@ -241,6 +286,7 @@ export function M5Behaviour() {
           </Panel>
         )}
       </div>
+      )}
     </div>
   )
 }

@@ -1,6 +1,6 @@
 import { pick, randInt, seeded, type Rng } from '@/lib/rng'
 import { docket } from '@/lib/format'
-import { getDistrictMetrics } from './districts'
+import { getDistrictMetrics, NOW, PERIOD_DAYS } from './districts'
 import { MO_VOCAB } from './incidents'
 import type { EdgeKind, GraphData, GraphEdge, GraphNode, NodeKind } from './types'
 
@@ -182,16 +182,26 @@ function build(): GraphData {
     // Incidents the group is jointly accused in.
     const incidentCount = randInt(r, 3, 7)
     for (let i = 0; i < incidentCount; i++) {
+      // A share of a group's offences happen where its members live rather than
+      // at its home base. Without this every incident sits in one district, no
+      // offender can span jurisdictions, and "MO across different
+      // jurisdictions" — a named capability — has nothing to find.
+      const away = r() < 0.4 ? pick(r, members) : null
+      const incidentDistrict = away?.district ?? home.name
+
       const inc = addNode(b, {
         id: `GINC-${incidentSerial}`,
         kind: 'Incident',
-        district: home.name,
+        district: incidentDistrict,
         label: docket('FIR', 40000 + incidentSerial),
         community: g,
         meta: {
           Entry: pick(r, MO_VOCAB.ENTRY),
           Target: pick(r, MO_VOCAB.TARGET),
           Window: pick(r, MO_VOCAB.TIMING),
+          // §7.2 wants a person's incidents "aggregated into a timeline", which
+          // is impossible without a date on each one.
+          At: NOW - Math.floor(r() * PERIOD_DAYS) * 864e5,
         },
       })
       incidentSerial++

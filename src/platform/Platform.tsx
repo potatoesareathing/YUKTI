@@ -185,7 +185,11 @@ function Masthead({
               className="tnum flex items-center justify-end gap-1"
               style={{ fontSize: 13, color: redZones > 0 ? '#FF3B2F' : '#DCD3BE' }}
             >
-              {redZones > 0 && <span aria-hidden>▲</span>}
+              {redZones > 0 && (
+                <span className="redzone-pulse" aria-hidden>
+                  ▲
+                </span>
+              )}
               {redZones}
             </div>
           </div>

@@ -136,7 +136,7 @@ export function M4Trends() {
                     }}
                     className="flex w-full items-center gap-3 px-3 py-2.5 text-left transition-colors hover:bg-brass/[0.06]"
                   >
-                    <span className="shrink-0" style={{ color: PALETTE.redzone }} aria-hidden>
+                    <span className="redzone-pulse shrink-0" style={{ color: PALETTE.redzone }} aria-hidden>
                       ▲
                     </span>
                     <span className="min-w-0 flex-1">

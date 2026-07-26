@@ -361,7 +361,7 @@ export function RankedBars({
               </span>
 
               {r.flag && (
-                <span className="tnum shrink-0" style={{ color: PALETTE.redzone, fontSize: 10 }} title="Red zone">
+                <span className="tnum redzone-pulse shrink-0" style={{ color: PALETTE.redzone, fontSize: 10 }} title="Red zone">
                   ▲
                 </span>
               )}

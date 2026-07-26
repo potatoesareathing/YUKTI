@@ -173,6 +173,12 @@
   .sweep-line {
     animation: yk-sweep 3.4s cubic-bezier(0.4, 0, 0.2, 1) infinite;
   }
+
+  /* Red-zone indicator. The brief asks for pulsing by name — a static mark
+     reads as a label, and this has to read as a live alarm. */
+  .redzone-pulse {
+    animation: yk-pulse 1.9s ease-in-out infinite;
+  }
 }
 
 @keyframes yk-in {

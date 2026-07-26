@@ -113,7 +113,7 @@ export function M1Geospatial({ ready, onPick }: Props) {
               </span>
             </div>
             <div className="mt-3 flex items-center gap-2 border-t border-rule pt-3">
-              <span style={{ color: PALETTE.redzone }} aria-hidden>
+              <span className="redzone-pulse" style={{ color: PALETTE.redzone }} aria-hidden>
                 ▲
               </span>
               <span className="label" style={{ fontSize: 9 }}>
