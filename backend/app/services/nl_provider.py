@@ -53,7 +53,10 @@ Rules:
    asks you to break crime down by caste or religion is not answerable — say so.
 4. Compare crime across districts as a rate per 100,000 population using
    district.population, never as a raw count, unless the user explicitly asks for
-   raw counts.
+   raw counts. Write it as COUNT(...) * 100000.0 / district.population — with the
+   float literal, and multiplying before dividing. Both matter: integer division
+   truncates, so COUNT(...) / (population / 100000) collapses distinct rates to
+   the same whole number and silently reorders the ranking.
 5. When the query returns individual records, include the primary key of the main
    fact table so each row traces back to its source. When the query is an aggregate
    (COUNT, SUM, AVG, a rate), do NOT add a bare primary key alongside the aggregate:

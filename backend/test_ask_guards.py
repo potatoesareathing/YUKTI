@@ -22,6 +22,7 @@ from app.services.nl_guard import (
     MAX_ROWS,
     QueryRejected,
     add_identifier,
+    integer_division_risk,
     joins_on_optional,
     rehydrate,
     scrub,
@@ -93,6 +94,22 @@ def test_scrub_roundtrip() -> None:
         _fail("scrub passthrough", f"ordinary question was altered: {clean}")
         return
     print("  ok    ordinary questions pass through unchanged")
+
+    # Magnitudes are not identifiers. Redacting "100000" left the model guessing
+    # at the denominator of the rate it was being asked to compute.
+    for magnitude in ("per 100000 people", "rate per 1000000", "per 100,000 population"):
+        got = scrub(magnitude)
+        if got.mapping:
+            _fail("magnitude not redacted", f"{magnitude!r} was scrubbed to {got.text!r}")
+            return
+    print("  ok    round magnitudes (100000, 1000000) are left visible to the model")
+
+    # ...but a real 7-digit KGID still goes.
+    kgid = scrub("officer with KGID 1353603")
+    if not kgid.mapping:
+        _fail("kgid still scrubbed", f"7-digit id was not redacted: {kgid.text!r}")
+    else:
+        print(f"  ok    a real 7-digit identifier is still redacted: {kgid.text}")
 
 
 def test_rejections() -> None:
@@ -267,6 +284,35 @@ def test_optional_join_detection() -> None:
         print(f"  ok    the same column name on the nullable table IS flagged: {found}")
 
 
+def test_integer_division_detected() -> None:
+    """Truncating a rate reorders the ranking, so it must not pass silently."""
+    print("\n[rates] integer division is detected")
+
+    truncating = (
+        "SELECT d.name, COUNT(cm.id) / (d.population / 100000) AS rate FROM case_master cm "
+        "JOIN district d ON cm.district_id = d.id GROUP BY d.name, d.population"
+    )
+    if not integer_division_risk(truncating):
+        _fail("detect int division", "the truncating rate query was not flagged")
+    else:
+        print("  ok    COUNT(...) / (population / 100000) flagged")
+
+    correct = (
+        "SELECT d.name, COUNT(cm.id) * 100000.0 / d.population AS rate FROM case_master cm "
+        "JOIN district d ON cm.district_id = d.id GROUP BY d.name, d.population"
+    )
+    if integer_division_risk(correct):
+        _fail("float ok", "the float-literal version should not be flagged")
+    else:
+        print("  ok    the * 100000.0 / population version is not flagged")
+
+    unrelated = "SELECT d.name, d.population FROM district d"
+    if integer_division_risk(unrelated):
+        _fail("no division", "a query with no division should not be flagged")
+    else:
+        print("  ok    a query with no division is not flagged")
+
+
 def test_catalogue_marks_optional() -> None:
     """The model can only avoid the trap if the schema tells it where the trap is."""
     print("\n[catalogue] optional columns and keys are marked for the model")
@@ -287,6 +333,7 @@ def main() -> int:
     test_rejections()
     test_permissions()
     test_evidence_is_added()
+    test_integer_division_detected()
     test_optional_join_detection()
     test_catalogue_marks_optional()
     test_catalogue_is_clean()

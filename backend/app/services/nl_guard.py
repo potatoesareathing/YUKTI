@@ -34,11 +34,20 @@ MAX_ROWS = 500
 
 # Identifiers worth scrubbing from an outbound question: crime numbers (18 digits),
 # KGID (7-8), case numbers (9), plus contact details that should never be in a query.
+#
+# Seven digits, not six: "per 100000 people" is a magnitude, not an identifier,
+# and redacting it left the model guessing at the denominator of its own rate
+# calculation. Round numbers are excluded for the same reason — nobody's KGID
+# is 1000000, but plenty of questions mention it.
 _ID_PATTERNS: tuple[re.Pattern[str], ...] = (
-    re.compile(r"\b[A-Za-z]{0,4}\d{6,}\b"),  # long numeric / prefixed ids
+    re.compile(r"\b[A-Za-z]{0,4}\d{7,}\b"),  # long numeric / prefixed ids
     re.compile(r"\b[\w.%-]+@[\w.-]+\.[A-Za-z]{2,}\b"),  # email
     re.compile(r"\b(?:\+91[- ]?)?[6-9]\d{9}\b"),  # Indian mobile
 )
+
+#: A bare number ending in three or more zeros is a magnitude (100000, 1000000),
+#: not an identifier. Anything with a prefix (KGID1000000) still scrubs.
+_ROUND_NUMBER = re.compile(r"^\d0{3,}$")
 
 _WRITE_KEYWORDS = (
     "insert",
@@ -87,6 +96,8 @@ def scrub(question: str) -> Scrubbed:
     def _replace(match: re.Match[str]) -> str:
         nonlocal counter
         value = match.group(0)
+        if _ROUND_NUMBER.match(value):
+            return value  # a magnitude the model needs to see, not an identifier
         for placeholder, original in mapping.items():
             if original == value:
                 return placeholder
@@ -258,6 +269,26 @@ def joins_on_optional(sql: str, source: str) -> list[str]:
                 flagged.add(f"{table}.{col.lower()}")
 
     return sorted(flagged)
+
+
+_FLOAT_LITERAL = re.compile(r"\d+\.\d+")
+_CAST_REAL = re.compile(r"\bcast\s*\(", re.IGNORECASE)
+
+
+def integer_division_risk(sql: str) -> bool:
+    """True when a rate is computed by dividing integers, which truncates.
+
+    ``COUNT(*) / (population / 100000)`` is the shape that keeps appearing.
+    On SQLite both divisions floor, so a population of 9,621,551 becomes 96 and
+    every district's rate collapses to a small whole number — which does not
+    merely lose precision, it silently reorders the ranking. The fix is a float
+    literal (``* 100000.0 /``), so its absence next to a division on a
+    population column is the signal.
+    """
+    lowered = sql.lower()
+    if "population" not in lowered or "/" not in lowered:
+        return False
+    return not (_FLOAT_LITERAL.search(sql) or _CAST_REAL.search(sql))
 
 
 def add_identifier(sql: str, source: str) -> tuple[str, str | None]:

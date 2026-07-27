@@ -30,6 +30,7 @@ from app.services.catalyst import CatalystError, get_catalyst_client
 from app.services.nl_guard import (
     QueryRejected,
     add_identifier,
+    integer_division_risk,
     is_aggregate,
     joins_on_optional,
     rehydrate,
@@ -230,6 +231,13 @@ def ask(db: Session, question: str, source: str | None = None) -> AskResult:
 
     if added_key:
         notes.append(f"Added {added_key} to the results so each row can be traced to its record.")
+
+    if integer_division_risk(sql):
+        notes.append(
+            "This rate was computed with integer division, so the values are truncated to whole "
+            "numbers and the ranking may be wrong. Ask again for the rate 'as a decimal' to get "
+            "an accurate ordering."
+        )
 
     if rows and not evidence:
         notes.append(
