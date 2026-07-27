@@ -18,7 +18,15 @@ from __future__ import annotations
 
 import sys
 
-from app.services.nl_guard import MAX_ROWS, QueryRejected, rehydrate, scrub, validate_query
+from app.services.nl_guard import (
+    MAX_ROWS,
+    QueryRejected,
+    add_identifier,
+    joins_on_optional,
+    rehydrate,
+    scrub,
+    validate_query,
+)
 from app.services.nl_schema import (
     BLOCKED_COLUMNS,
     SOURCE_CATALYST,
@@ -169,10 +177,118 @@ def test_catalogue_is_clean() -> None:
             print(f"  ok    {source}: {len(catalogue.splitlines())} lines, none of {len(BLOCKED_COLUMNS)} blocked names")
 
 
+def test_evidence_is_added() -> None:
+    """Evidence is mandatory, so the key is added when the model forgets it."""
+    print("\n[evidence] the primary key is added, not merely requested")
+
+    sql, added = add_identifier(
+        "SELECT cm.status FROM case_master cm WHERE cm.crime_no = '100010003' LIMIT 500",
+        SOURCE_LOCAL,
+    )
+    if added != "cm.id" or "cm.id" not in sql:
+        _fail("add pk", f"expected cm.id to be added, got added={added!r} sql={sql!r}")
+    else:
+        print(f"  ok    row query gained {added}: {sql}")
+
+    # Already present — must not be duplicated.
+    original = "SELECT cm.id, cm.status FROM case_master cm LIMIT 500"
+    sql, added = add_identifier(original, SOURCE_LOCAL)
+    if added is not None or sql != original:
+        _fail("no duplicate pk", f"should have been left alone, got {sql!r}")
+    else:
+        print("  ok    query that already selects the key is left alone")
+
+    # Aggregates must not gain a bare key beside the aggregate — that is an
+    # error on PostgreSQL and returns an arbitrary row on SQLite.
+    agg = "SELECT d.name, COUNT(*) AS total FROM case_master cm JOIN district d ON cm.district_id = d.id GROUP BY d.name"
+    sql, added = add_identifier(agg, SOURCE_LOCAL)
+    if added is not None:
+        _fail("aggregate untouched", f"must not add a key to an aggregate, added {added!r}")
+    else:
+        print("  ok    aggregate left alone")
+
+    for label, query in (
+        ("DISTINCT", "SELECT DISTINCT cm.status FROM case_master cm"),
+        ("UNION", "SELECT cm.status FROM case_master cm UNION SELECT status FROM case_master"),
+        ("function in select list", "SELECT upper(cm.status) FROM case_master cm"),
+    ):
+        _, added = add_identifier(query, SOURCE_LOCAL)
+        if added is not None:
+            _fail(f"leave {label} alone", f"rewrote a {label} query, added {added!r}")
+        else:
+            print(f"  ok    {label} left alone rather than rewritten blindly")
+
+
+def test_optional_join_detection() -> None:
+    """An inner join on a nullable column is why 'no records' can be a lie."""
+    print("\n[optional joins] inner joins on nullable columns are detected")
+
+    bad = (
+        "SELECT cm.status, e.name FROM case_master cm JOIN employee e ON cm.officer_id = e.id "
+        "WHERE cm.crime_no = '100010003'"
+    )
+    found = joins_on_optional(bad, SOURCE_LOCAL)
+    if found != ["case_master.officer_id"]:
+        _fail("detect inner join", f"expected ['case_master.officer_id'], got {found}")
+    else:
+        print(f"  ok    inner JOIN on a nullable column detected: {found}")
+
+    good = bad.replace(" JOIN ", " LEFT JOIN ")
+    if joins_on_optional(good, SOURCE_LOCAL):
+        _fail("left join ok", "LEFT JOIN should not be flagged")
+    else:
+        print("  ok    the LEFT JOIN version is not flagged")
+
+    plain = "SELECT cm.id, cm.status FROM case_master cm WHERE cm.status = 'Disposed'"
+    if joins_on_optional(plain, SOURCE_LOCAL):
+        _fail("no join", "a query with no join should not be flagged")
+    else:
+        print("  ok    a query with no join is not flagged")
+
+    # The false positive this check was originally written with: case_master.unit_id
+    # is NOT nullable, only employee.unit_id is. Matching bare column names
+    # warned about the wrong query, which trains people to ignore warnings.
+    mixed = (
+        "SELECT cm.id, u.name FROM case_master cm JOIN district d ON cm.district_id = d.id "
+        "LEFT JOIN unit u ON cm.unit_id = u.id WHERE d.name = 'Kalaburagi'"
+    )
+    found = joins_on_optional(mixed, SOURCE_LOCAL)
+    if found:
+        _fail("no false positive", f"case_master.unit_id is not nullable, but got {found}")
+    else:
+        print("  ok    inner join on a NON-nullable column is not flagged (no false positive)")
+
+    # ... and the same column name really is nullable on the other table.
+    emp = "SELECT e.name, u.name FROM employee e JOIN unit u ON e.unit_id = u.id"
+    found = joins_on_optional(emp, SOURCE_LOCAL)
+    if found != ["employee.unit_id"]:
+        _fail("qualified match", f"expected ['employee.unit_id'], got {found}")
+    else:
+        print(f"  ok    the same column name on the nullable table IS flagged: {found}")
+
+
+def test_catalogue_marks_optional() -> None:
+    """The model can only avoid the trap if the schema tells it where the trap is."""
+    print("\n[catalogue] optional columns and keys are marked for the model")
+    catalogue = render_catalogue(SOURCE_LOCAL)
+    if "OPTIONAL" not in catalogue:
+        _fail("optional marker", "catalogue does not mark any column OPTIONAL")
+    else:
+        marked = [ln.strip() for ln in catalogue.splitlines() if "OPTIONAL" in ln]
+        print(f"  ok    {len(marked)} column(s) marked OPTIONAL, e.g. {marked[0][:70]}")
+    if "PRIMARY KEY" not in catalogue:
+        _fail("pk marker", "catalogue does not mark any PRIMARY KEY")
+    else:
+        print("  ok    primary keys marked")
+
+
 def main() -> int:
     test_scrub_roundtrip()
     test_rejections()
     test_permissions()
+    test_evidence_is_added()
+    test_optional_join_detection()
+    test_catalogue_marks_optional()
     test_catalogue_is_clean()
 
     print()

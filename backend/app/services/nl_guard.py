@@ -191,3 +191,119 @@ def validate_query(sql: str, source: str) -> str:
         cleaned = f"{cleaned} LIMIT {MAX_ROWS}"
 
     return cleaned
+
+
+_AGGREGATES = re.compile(r"\b(count|sum|avg|min|max|group_concat|total)\s*\(", re.IGNORECASE)
+_SELECT_LIST = re.compile(r"^select\s+(?:distinct\s+)?(.*?)\s+from\b", re.IGNORECASE | re.DOTALL)
+_FIRST_FROM = re.compile(r"\bfrom\s+([A-Za-z_][A-Za-z0-9_]*)(?:\s+(?:as\s+)?([A-Za-z_][A-Za-z0-9_]*))?", re.IGNORECASE)
+_INNER_JOIN = re.compile(r"(?<!left\s)(?<!right\s)(?<!full\s)(?<!cross\s)\bjoin\b", re.IGNORECASE)
+
+
+def is_aggregate(sql: str) -> bool:
+    """True when the query summarises rather than enumerates."""
+    lowered = sql.lower()
+    return bool(_AGGREGATES.search(sql)) or " group by " in lowered
+
+
+_TABLE_REF = re.compile(
+    r"\b(?:from|join)\s+([A-Za-z_][A-Za-z0-9_]*)(?:\s+(?:as\s+)?([A-Za-z_][A-Za-z0-9_]*))?",
+    re.IGNORECASE,
+)
+_JOIN_CLAUSE = re.compile(
+    r"\b(left\s+outer|left|right\s+outer|right|full\s+outer|full|cross|inner)?\s*\bjoin\b"
+    r"\s+[A-Za-z_][A-Za-z0-9_]*(?:\s+(?:as\s+)?[A-Za-z_][A-Za-z0-9_]*)?"
+    r"\s+on\s+(.*?)(?=\b(?:left|right|full|cross|inner)?\s*\bjoin\b|\bwhere\b|\bgroup\b|\border\b|\blimit\b|$)",
+    re.IGNORECASE | re.DOTALL,
+)
+_RESERVED_ALIASES = {"where", "group", "order", "limit", "join", "left", "right", "full",
+                     "cross", "inner", "on", "as", "union", "having"}
+
+
+def _alias_map(sql: str) -> dict[str, str]:
+    """alias (or bare table name) -> table name, so qualified columns resolve."""
+    aliases: dict[str, str] = {}
+    for table, alias in _TABLE_REF.findall(sql):
+        aliases[table.lower()] = table.lower()
+        if alias and alias.lower() not in _RESERVED_ALIASES:
+            aliases[alias.lower()] = table.lower()
+    return aliases
+
+
+def joins_on_optional(sql: str, source: str) -> list[str]:
+    """Optional columns used in an INNER join's ON clause — where rows vanish.
+
+    Prompt rule 6 asks for LEFT JOIN on nullable columns. This reports whether
+    the model actually did it, so the answer can be qualified when it did not.
+
+    Precision matters more than recall here: a warning that rows may be missing,
+    attached to a query where none are, teaches the user to ignore the warnings.
+    So this resolves aliases to tables and only inspects the ON clause of joins
+    that are genuinely inner.
+    """
+    from app.services.nl_schema import optional_columns
+
+    optional = optional_columns(source)
+    if not optional:
+        return []
+
+    aliases = _alias_map(sql)
+    flagged: set[str] = set()
+
+    for kind, on_clause in _JOIN_CLAUSE.findall(sql):
+        if kind and kind.strip().lower().split()[0] in {"left", "right", "full", "cross"}:
+            continue  # outer join — nulls are preserved, which is the point
+        for prefix, col in re.findall(r"\b([A-Za-z_][A-Za-z0-9_]*)\.([A-Za-z_][A-Za-z0-9_]*)", on_clause):
+            table = aliases.get(prefix.lower())
+            if table and f"{table}.{col.lower()}" in optional:
+                flagged.add(f"{table}.{col.lower()}")
+
+    return sorted(flagged)
+
+
+def add_identifier(sql: str, source: str) -> tuple[str, str | None]:
+    """Add the main table's primary key to the SELECT list if it is missing.
+
+    BACKEND.md makes evidence mandatory, and prompt rule 5 asks for the key —
+    but a prompt is a request. This is the guarantee. It only rewrites the
+    simple, unambiguous case: a row-level query, no DISTINCT, no set operation,
+    no subquery in the select list. Anything cleverer is left alone and reported
+    in ``notes`` instead, because silently changing a query the user is about to
+    read would be worse than an incomplete evidence list.
+
+    Returns the query and the column added, or None when nothing was changed.
+    """
+    from app.services.nl_schema import primary_key_for
+
+    if is_aggregate(sql):
+        return sql, None
+
+    lowered = sql.lower()
+    if any(tok in lowered for tok in (" union ", " intersect ", " except ", "distinct")):
+        return sql, None
+
+    select_match = _SELECT_LIST.search(sql)
+    from_match = _FIRST_FROM.search(sql)
+    if not select_match or not from_match:
+        return sql, None
+
+    select_list = select_match.group(1)
+    if "(" in select_list:  # a function or subquery — do not touch
+        return sql, None
+
+    table, alias = from_match.group(1), from_match.group(2)
+    if alias and alias.lower() in {"where", "group", "order", "limit", "join", "left", "inner", "on"}:
+        alias = None
+    prefix = alias or table
+
+    pk = primary_key_for(source, table)
+    if not pk:
+        return sql, None
+
+    qualified = f"{prefix}.{pk}"
+    already = re.search(rf"(?:^|[\s,]){re.escape(prefix)}\.{re.escape(pk)}\b", select_list, re.IGNORECASE)
+    bare = re.search(rf"(?:^|[\s,]){re.escape(pk)}\b", select_list, re.IGNORECASE)
+    if already or bare or select_list.strip() == "*":
+        return sql, None
+
+    start, end = select_match.span(1)
+    return sql[:start] + f"{qualified}, " + sql[start:], qualified

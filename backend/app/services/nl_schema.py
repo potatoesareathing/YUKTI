@@ -32,6 +32,10 @@ class Column:
     name: str
     type: str
     description: str
+    #: True when the column is nullable. Joining on one of these with an inner
+    #: join silently drops rows, which reads to the user as "no such record"
+    #: rather than "that field is blank" — so the catalogue has to say so.
+    optional: bool = False
 
 
 @dataclass(frozen=True)
@@ -40,6 +44,8 @@ class Table:
     description: str
     columns: tuple[Column, ...]
     joins: tuple[str, ...] = field(default=())
+    #: Column that identifies a row, used to make answers traceable.
+    primary_key: str = "id"
 
     @property
     def column_names(self) -> set[str]:
@@ -113,7 +119,7 @@ LOCAL_TABLES: tuple[Table, ...] = (
             Column("id", "integer", "Primary key."),
             Column("name", "text", "Officer name."),
             Column("rank", "text", "Rank, e.g. 'ASI', 'PSI'."),
-            Column("unit_id", "text", "References unit.id."),
+            Column("unit_id", "text", "References unit.id.", optional=True),
         ),
         joins=("employee.unit_id = unit.id",),
     ),
@@ -138,7 +144,12 @@ LOCAL_TABLES: tuple[Table, ...] = (
             Column("mo_target", "text", "Modus operandi: target."),
             Column("mo_timing", "text", "Modus operandi: time window."),
             Column("mo_tools", "text", "Modus operandi: tools used."),
-            Column("officer_id", "integer", "References employee.id — the investigating officer."),
+            Column(
+                "officer_id",
+                "integer",
+                "References employee.id — the investigating officer. Often unassigned.",
+                optional=True,
+            ),
             Column("anomaly", "boolean", "True when the anomaly detector flagged this case."),
             Column("anomaly_score", "real", "Isolation Forest score; higher is more unusual."),
         ),
@@ -185,9 +196,15 @@ LOCAL_TABLES: tuple[Table, ...] = (
         columns=(
             Column("case_id", "text", "References case_master.id."),
             Column("filed", "boolean", "Whether a chargesheet was filed."),
-            Column("filed_at", "bigint", "Filing timestamp, epoch milliseconds. Null when not filed."),
+            Column(
+                "filed_at",
+                "bigint",
+                "Filing timestamp, epoch milliseconds. Null when not filed.",
+                optional=True,
+            ),
         ),
         joins=("chargesheet_details.case_id = case_master.id",),
+        primary_key="case_id",
     ),
 )
 
@@ -203,6 +220,7 @@ CATALYST_TABLES: tuple[Table, ...] = (
             Column("Active", "boolean", "Whether the district is active."),
         ),
         joins=("District.StateID = State.ROWID",),
+        primary_key="ROWID",
     ),
     Table(
         name="State",
@@ -212,6 +230,7 @@ CATALYST_TABLES: tuple[Table, ...] = (
             Column("StateID", "int", "Legacy state id."),
             Column("StateName", "varchar", "State name."),
         ),
+        primary_key="ROWID",
     ),
     Table(
         name="Unit",
@@ -224,6 +243,7 @@ CATALYST_TABLES: tuple[Table, ...] = (
             Column("StateID", "foreign key", "References State.ROWID."),
         ),
         joins=("Unit.DistrictID = District.ROWID", "Unit.TypeID = UnitType.ROWID"),
+        primary_key="ROWID",
     ),
     Table(
         name="UnitType",
@@ -232,6 +252,7 @@ CATALYST_TABLES: tuple[Table, ...] = (
             Column("ROWID", "bigint", "Catalyst row id."),
             Column("UnitTypeName", "varchar", "Type name."),
         ),
+        primary_key="ROWID",
     ),
     Table(
         name="Employee",
@@ -244,6 +265,7 @@ CATALYST_TABLES: tuple[Table, ...] = (
             Column("DistrictID", "foreign key", "References District.ROWID."),
         ),
         joins=("Employee.UnitID = Unit.ROWID", "Employee.DistrictID = District.ROWID"),
+        primary_key="ROWID",
     ),
     Table(
         name="CaseMaster",
@@ -269,6 +291,7 @@ CATALYST_TABLES: tuple[Table, ...] = (
             "CaseMaster.CrimeMajorHeadID = CrimeHead.ROWID",
             "CaseMaster.CaseStatusID = CaseStatusMaster.ROWID",
         ),
+        primary_key="ROWID",
     ),
     Table(
         name="CrimeHead",
@@ -277,6 +300,7 @@ CATALYST_TABLES: tuple[Table, ...] = (
             Column("ROWID", "bigint", "Catalyst row id."),
             Column("CrimeGroupName", "varchar", "Crime group name, e.g. 'CYBER CRIME'."),
         ),
+        primary_key="ROWID",
     ),
     Table(
         name="CrimeSubHead",
@@ -287,6 +311,7 @@ CATALYST_TABLES: tuple[Table, ...] = (
             Column("CrimeHeadID", "foreign key", "References CrimeHead.ROWID."),
         ),
         joins=("CrimeSubHead.CrimeHeadID = CrimeHead.ROWID",),
+        primary_key="ROWID",
     ),
     Table(
         name="CaseStatusMaster",
@@ -295,6 +320,7 @@ CATALYST_TABLES: tuple[Table, ...] = (
             Column("ROWID", "bigint", "Catalyst row id."),
             Column("CaseStatusName", "varchar", "Status name."),
         ),
+        primary_key="ROWID",
     ),
     Table(
         name="GravityOffence",
@@ -303,6 +329,7 @@ CATALYST_TABLES: tuple[Table, ...] = (
             Column("ROWID", "bigint", "Catalyst row id."),
             Column("LookupValue", "varchar", "Gravity label."),
         ),
+        primary_key="ROWID",
     ),
     Table(
         name="Act",
@@ -313,6 +340,7 @@ CATALYST_TABLES: tuple[Table, ...] = (
             Column("ShortName", "varchar", "Short name, e.g. 'IPC 1860'."),
             Column("ActDescription", "text", "Full description."),
         ),
+        primary_key="ROWID",
     ),
     Table(
         name="Section",
@@ -323,6 +351,7 @@ CATALYST_TABLES: tuple[Table, ...] = (
             Column("SectionCode", "varchar", "Section code, e.g. '302'."),
         ),
         joins=("Section.ActID = Act.ROWID",),
+        primary_key="ROWID",
     ),
     Table(
         name="ActSectionAssociation",
@@ -338,6 +367,7 @@ CATALYST_TABLES: tuple[Table, ...] = (
             "ActSectionAssociation.ActID = Act.ROWID",
             "ActSectionAssociation.SectionID = Section.ROWID",
         ),
+        primary_key="ROWID",
     ),
     Table(
         name="Victim",
@@ -349,6 +379,7 @@ CATALYST_TABLES: tuple[Table, ...] = (
             Column("GenderID", "int", "Gender code: 1 male, 2 female, 3 unknown."),
         ),
         joins=("Victim.CaseMasterID = CaseMaster.ROWID",),
+        primary_key="ROWID",
     ),
     Table(
         name="Accused",
@@ -359,6 +390,7 @@ CATALYST_TABLES: tuple[Table, ...] = (
             Column("PersonID", "varchar", "Person reference."),
         ),
         joins=("Accused.CaseMasterID = CaseMaster.ROWID",),
+        primary_key="ROWID",
     ),
 )
 
@@ -387,13 +419,40 @@ def allowed_columns(source: str) -> set[str]:
     return names
 
 
+def primary_key_for(source: str, table_name: str) -> str | None:
+    """The identifier column for a table, so answers can be traced to records."""
+    for table in tables_for(source):
+        if table.name.lower() == table_name.lower():
+            return table.primary_key
+    return None
+
+
+def optional_columns(source: str) -> set[str]:
+    """Nullable columns as ``table.column``.
+
+    Qualified deliberately: ``employee.unit_id`` is nullable and
+    ``case_master.unit_id`` is not, so matching on the bare name would warn
+    about the wrong query.
+    """
+    names: set[str] = set()
+    for table in tables_for(source):
+        names |= {f"{table.name.lower()}.{c.name.lower()}" for c in table.columns if c.optional}
+    return names
+
+
 def render_catalogue(source: str) -> str:
     """Render the catalogue as the prompt text. This is the only schema the model sees."""
     lines: list[str] = []
     for table in tables_for(source):
         lines.append(f"TABLE {table.name}  -- {table.description}")
         for col in table.columns:
-            lines.append(f"    {col.name} ({col.type})  -- {col.description}")
+            marks = []
+            if col.name == table.primary_key:
+                marks.append("PRIMARY KEY")
+            if col.optional:
+                marks.append("OPTIONAL, may be NULL - use LEFT JOIN")
+            suffix = f"  [{'; '.join(marks)}]" if marks else ""
+            lines.append(f"    {col.name} ({col.type}){suffix}  -- {col.description}")
         if table.joins:
             lines.append("  joins: " + "; ".join(table.joins))
         lines.append("")

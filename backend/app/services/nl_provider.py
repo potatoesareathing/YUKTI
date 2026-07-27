@@ -59,11 +59,15 @@ Rules:
    (COUNT, SUM, AVG, a rate), do NOT add a bare primary key alongside the aggregate:
    selecting a non-grouped column next to an aggregate is an error on PostgreSQL and
    silently returns an arbitrary row on SQLite. Group by every non-aggregated column.
-6. Prefer aggregates. Only return individual person rows when the question genuinely
+6. Use LEFT JOIN, never a plain JOIN, when you join on a column the schema marks
+   OPTIONAL. Those columns are frequently NULL, and an inner join drops the row
+   entirely — so the user is told "no such record" about a record that exists.
+   A confidently wrong answer is worse than no answer.
+7. Prefer aggregates. Only return individual person rows when the question genuinely
    requires them, and never more than is needed to answer it.
-7. Placeholders of the form <ID_1> are redacted identifiers. Use them verbatim inside
+8. Placeholders of the form <ID_1> are redacted identifiers. Use them verbatim inside
    string literals; they are substituted for real values after you respond.
-8. Add an explicit LIMIT. Keep it at or below 500.
+9. Add an explicit LIMIT. Keep it at or below 500.
 
 Reply with JSON only, matching this shape exactly:
 {{"answerable": true|false, "sql": "...", "explanation": "...", "unanswerable_reason": "..."}}
@@ -241,6 +245,21 @@ class OpenAICompatibleQueryPlanner:
         self._max_retries = max_retries
 
     @staticmethod
+    def _is_unsupported_format(text: str) -> bool:
+        """Does this 400 mean 'I do not do structured outputs' rather than 'bad request'?"""
+        lowered = text.lower()
+        return any(
+            phrase in lowered
+            for phrase in (
+                "response_format",
+                "structured output",
+                "structured_output",
+                "json_schema",
+                "json schema",
+            )
+        )
+
+    @staticmethod
     def _retry_after(response: httpx.Response, default: float = 5.0, ceiling: float = 30.0) -> float:
         """How long to wait after a 429, from the header or the message body."""
         header = response.headers.get("retry-after")
@@ -278,9 +297,14 @@ class OpenAICompatibleQueryPlanner:
             response = httpx.post(
                 f"{self._base}/chat/completions", json=body, headers=headers, timeout=self._timeout
             )
-            # Not every compatible server implements json_schema; retry once plainly.
-            if response.status_code == 400 and "response_format" in response.text:
-                body.pop("response_format")
+            # Not every compatible server implements json_schema, and they each
+            # say so differently — "response_format", "structured outputs not
+            # support", "json_schema is not supported". Match the concept, not
+            # one provider's wording, then retry plainly; _parse copes with the
+            # loose JSON that comes back.
+            if response.status_code == 400 and self._is_unsupported_format(response.text):
+                log.info("%s does not support structured outputs; retrying without it", self.name)
+                body.pop("response_format", None)
                 response = httpx.post(
                     f"{self._base}/chat/completions", json=body, headers=headers, timeout=self._timeout
                 )

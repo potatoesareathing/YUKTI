@@ -27,7 +27,15 @@ from sqlalchemy.orm import Session
 
 from app.config import get_settings
 from app.services.catalyst import CatalystError, get_catalyst_client
-from app.services.nl_guard import QueryRejected, rehydrate, scrub, validate_query
+from app.services.nl_guard import (
+    QueryRejected,
+    add_identifier,
+    is_aggregate,
+    joins_on_optional,
+    rehydrate,
+    scrub,
+    validate_query,
+)
 from app.services.nl_provider import PlannerUnavailable, QueryPlan, build_planner
 from app.services.nl_schema import SOURCE_CATALYST, SOURCE_LOCAL, tables_for
 
@@ -199,6 +207,12 @@ def ask(db: Session, question: str, source: str | None = None) -> AskResult:
         log.warning("Rejected generated query for source=%s: %s", source, exc)
         raise AskFailed(f"The generated query was rejected: {exc}") from exc
 
+    # 4b. Evidence is mandatory per BACKEND.md, and asking the model for it in
+    # the prompt is not the same as getting it. Add the key ourselves when the
+    # query enumerates rows and the model left it out.
+    sql, added_key = add_identifier(sql, source)
+    optional_inner_joins = joins_on_optional(sql, source)
+
     # 5. Execution never leaves the jurisdiction.
     try:
         if source == SOURCE_CATALYST:
@@ -213,11 +227,32 @@ def ask(db: Session, question: str, source: str | None = None) -> AskResult:
 
     evidence = _collect_evidence(rows)
     notes: list[str] = []
+
+    if added_key:
+        notes.append(f"Added {added_key} to the results so each row can be traced to its record.")
+
     if rows and not evidence:
         notes.append(
             "This result is an aggregate with no per-record identifier, so it cannot be traced to "
             "individual records."
         )
+
+    # An inner join on a nullable column drops rows rather than showing them
+    # blank, so "no records matched" can mean "the record exists but that field
+    # is empty". Say so instead of letting a wrong answer stand unqualified.
+    if optional_inner_joins and not is_aggregate(sql):
+        joined = ", ".join(optional_inner_joins)
+        if not rows:
+            notes.append(
+                f"No rows came back, but this query inner-joins on {joined}, which may be empty. "
+                "A matching record may exist with that field unset — try asking without it."
+            )
+        else:
+            notes.append(
+                f"This query inner-joins on {joined}, which may be empty; records with that field "
+                "unset are not included in the count."
+            )
+
     if scrubbed.redacted_count:
         notes.append(
             f"{scrubbed.redacted_count} identifier(s) in the question were replaced with placeholders "
