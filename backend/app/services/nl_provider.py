@@ -34,7 +34,7 @@ from typing import Any, Protocol
 import httpx
 
 from app.config import get_settings
-from app.services.nl_schema import render_catalogue
+from app.services.nl_schema import SOURCE_CATALYST, render_catalogue
 
 log = logging.getLogger(__name__)
 
@@ -51,9 +51,7 @@ Rules:
 3. Never reference caste, religion, occupation, or any FIR narrative/brief-facts
    column. They are protected attributes and are not in the schema. A question that
    asks you to break crime down by caste or religion is not answerable — say so.
-4. Compare crime across districts as a rate per 100,000 population using
-   district.population, never as a raw count, unless the user explicitly asks for
-   raw counts. Write it as COUNT(...) * 100000.0 / district.population — with the
+{rate_rule} Write it as COUNT(...) * 100000.0 / district.population — with the
    float literal, and multiplying before dividing. Both matter: integer division
    truncates, so COUNT(...) / (population / 100000) collapses distinct rates to
    the same whole number and silently reorders the ranking.
@@ -72,6 +70,7 @@ Rules:
    string literals; they are substituted for real values after you respond.
 9. Add an explicit LIMIT. Keep it at or below 500.
 
+{dialect_rules}
 Reply with JSON only, matching this shape exactly:
 {{"answerable": true|false, "sql": "...", "explanation": "...", "unanswerable_reason": "..."}}
 
@@ -130,8 +129,50 @@ class QueryPlanner(Protocol):
     def plan(self, question: str, source: str, dialect: str) -> QueryPlan: ...
 
 
+# Per-100k comparison is a rule of the platform, but it is only expressible when
+# the schema carries a population denominator. The Catalyst schema does not, and
+# telling a model to divide by a column that is not in its catalogue makes it
+# invent one — which the validator then rejects, turning a good rule into a
+# guaranteed failure.
+_RATE_RULE_WITH_POPULATION = """\
+4. Compare crime across districts as a rate per 100,000 population using
+   district.population, never as a raw count, unless the user explicitly asks for
+   raw counts. Use a float divisor (100000.0) so the division is not integer."""
+
+_RATE_RULE_NO_POPULATION = """\
+4. This schema carries no population figures, so per-capita rates cannot be
+   computed from it. Answer with counts, and when a question asks which place is
+   "most dangerous" or "worst", say in the explanation that the ranking is by
+   raw count and is not adjusted for population."""
+
+
+# ZCQL is SQL-shaped but materially stricter, and it reports every violation as
+# the same unhelpful "Select column(s) not given". Each line below was
+# established by probing the live endpoint rather than read from documentation.
+_ZCQL_RULES = """\
+This database is Zoho Catalyst, whose ZCQL dialect is stricter than SQL. All of
+these were verified against the live endpoint:
+  - COUNT(*) is rejected. Use COUNT(ROWID), or COUNT of a named column.
+  - Arithmetic in the SELECT list is rejected. No `COUNT(x) * 100.0 / y`, no
+    computed columns at all. Select plain columns and aggregates only.
+  - ORDER BY cannot reference a SELECT alias. Repeat the expression instead:
+    `ORDER BY COUNT(CaseMaster.ROWID) DESC`, never `ORDER BY n DESC`.
+  - LIMIT must be 300 or less. 301 is rejected outright.
+  - JOIN, INNER JOIN and LEFT JOIN all work, as does GROUP BY.
+  - Every table is keyed by ROWID; there are no other primary keys.
+
+"""
+
+
 def _system_prompt(source: str, dialect: str) -> str:
-    return _SYSTEM_PROMPT.format(dialect=dialect, catalogue=render_catalogue(source))
+    catalogue = render_catalogue(source)
+    has_population = "population" in catalogue.lower()
+    return _SYSTEM_PROMPT.format(
+        dialect=dialect,
+        catalogue=catalogue,
+        rate_rule=_RATE_RULE_WITH_POPULATION if has_population else _RATE_RULE_NO_POPULATION,
+        dialect_rules=_ZCQL_RULES if source == SOURCE_CATALYST else "",
+    )
 
 
 def _parse(text: str, model: str) -> QueryPlan:

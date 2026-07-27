@@ -32,6 +32,15 @@ from app.services.nl_schema import (
 
 MAX_ROWS = 500
 
+#: ZCQL refuses a LIMIT above 300 outright ("ZCQL CANNOT HAVE MORE THAN 300
+#: ROWS in LIMIT"), so the cap has to follow the backing store rather than be
+#: one number for everything.
+MAX_ROWS_BY_SOURCE: dict[str, int] = {"catalyst": 300}
+
+
+def max_rows_for(source: str) -> int:
+    return MAX_ROWS_BY_SOURCE.get(source, MAX_ROWS)
+
 # Identifiers worth scrubbing from an outbound question: crime numbers (18 digits),
 # KGID (7-8), case numbers (9), plus contact details that should never be in a query.
 #
@@ -194,12 +203,13 @@ def validate_query(sql: str, source: str) -> str:
                 f"Query references unknown column {col!r}. Only catalogued columns can be selected."
             )
 
+    cap = max_rows_for(source)
     match = _LIMIT.search(cleaned)
     if match:
-        if int(match.group(1)) > MAX_ROWS:
-            cleaned = _LIMIT.sub(f"LIMIT {MAX_ROWS}", cleaned, count=1)
+        if int(match.group(1)) > cap:
+            cleaned = _LIMIT.sub(f"LIMIT {cap}", cleaned, count=1)
     else:
-        cleaned = f"{cleaned} LIMIT {MAX_ROWS}"
+        cleaned = f"{cleaned} LIMIT {cap}"
 
     return cleaned
 

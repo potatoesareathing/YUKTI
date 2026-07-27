@@ -70,17 +70,34 @@ class CatalystClient:
         self,
         project_id: str,
         environment_id: str,
-        refresh_token: str,
-        client_id: str,
-        client_secret: str,
+        refresh_token: str = "",
+        client_id: str = "",
+        client_secret: str = "",
         datacentre: str = "in",
         environment: str = "Development",
         timeout: float = 20.0,
+        access_token: str = "",
     ) -> None:
-        if not all([project_id, environment_id, refresh_token, client_id, client_secret]):
+        """Authenticates one of two ways.
+
+        A ``refresh_token`` plus client credentials is the durable option: the
+        client mints access tokens as needed and a long-running service never
+        needs attention.
+
+        An ``access_token`` on its own is the short-lived option, for a token
+        injected by something that already holds the credentials — a CI secret,
+        a sidecar, or ``catalyst token:generate`` on a developer's machine. It
+        expires in about an hour and is not refreshed, which is the point: the
+        credential that could mint more never reaches this process.
+        """
+        if not project_id or not environment_id:
             raise CatalystNotConfigured(
-                "Catalyst is not configured. Set catalyst_project_id, catalyst_environment_id, "
-                "catalyst_refresh_token, catalyst_client_id and catalyst_client_secret."
+                "Catalyst is not configured. Set catalyst_project_id and catalyst_environment_id."
+            )
+        if not access_token and not all([refresh_token, client_id, client_secret]):
+            raise CatalystNotConfigured(
+                "Catalyst needs either catalyst_access_token, or all of catalyst_refresh_token, "
+                "catalyst_client_id and catalyst_client_secret."
             )
         self.project_id = project_id
         self.environment_id = environment_id
@@ -91,7 +108,10 @@ class CatalystClient:
         self._accounts = _ACCOUNTS_HOST.get(datacentre, _ACCOUNTS_HOST["in"])
         self._api = _API_HOST.get(datacentre, _API_HOST["in"])
         self._timeout = timeout
-        self._token = _Token("", 0.0)
+        self._static_token = access_token
+        # A supplied token is treated as valid for an hour; Zoho issues them
+        # with roughly that lifetime and does not tell us when it was minted.
+        self._token = _Token(access_token, time.time() + 3600) if access_token else _Token("", 0.0)
         self._lock = threading.Lock()
 
     # ------------------------------------------------------------------ auth
@@ -100,6 +120,12 @@ class CatalystClient:
         with self._lock:
             if self._token.valid:
                 return self._token.value
+            if self._static_token:
+                raise CatalystError(
+                    "The supplied Catalyst access token has expired. Supply a fresh "
+                    "catalyst_access_token, or configure the refresh-token credentials so "
+                    "tokens can be minted automatically."
+                )
             try:
                 response = httpx.post(
                     f"{self._accounts}/oauth/v2/token",
@@ -124,14 +150,28 @@ class CatalystClient:
 
     # ----------------------------------------------------------------- query
 
+    def _headers(self) -> dict[str, str]:
+        """Catalyst selects project environment by header, not query string.
+
+        Sending ``?Environment=`` and ``?catalyst_org=`` instead is accepted by
+        the endpoint and then rejected as INVALID_INPUT, which reads like a
+        malformed query rather than a missing header — so these are kept in one
+        place and mirrored from the CLI's own request builder.
+        """
+        return {
+            "Authorization": f"Zoho-oauthtoken {self._access_token()}",
+            "Accept": "application/vnd.catalyst.v2+json",
+            "X-CATALYST-Environment": self.environment,
+            "CATALYST-ORG": self.environment_id,
+        }
+
     def query(self, zcql: str) -> list[dict[str, Any]]:
         """Run one ZCQL statement and return flattened rows."""
         url = f"{self._api}/baas/v1/project/{self.project_id}/query"
         try:
             response = httpx.post(
                 url,
-                params={"catalyst_org": self.environment_id, "Environment": self.environment},
-                headers={"Authorization": f"Zoho-oauthtoken {self._access_token()}"},
+                headers=self._headers(),
                 json={"query": zcql},
                 timeout=self._timeout,
             )
@@ -207,5 +247,6 @@ def get_catalyst_client() -> CatalystClient:
                 client_secret=settings.catalyst_client_secret,
                 datacentre=settings.catalyst_dc,
                 environment=settings.catalyst_environment,
+                access_token=settings.catalyst_access_token,
             )
         return _client

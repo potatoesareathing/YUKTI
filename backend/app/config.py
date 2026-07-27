@@ -63,6 +63,9 @@ class Settings(BaseSettings):
     # disable the Catalyst source; /api/ask?source=local keeps working.
     catalyst_project_id: str = ""
     catalyst_environment_id: str = ""
+    # Either the refresh-token trio below, or a short-lived access token minted
+    # elsewhere (`catalyst token:generate`, a CI secret, a sidecar).
+    catalyst_access_token: str = ""
     catalyst_refresh_token: str = ""
     catalyst_client_id: str = ""
     catalyst_client_secret: str = ""
