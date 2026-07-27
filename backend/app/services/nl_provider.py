@@ -26,6 +26,8 @@ from __future__ import annotations
 
 import json
 import logging
+import re
+import time
 from dataclasses import dataclass
 from typing import Any, Protocol
 
@@ -52,8 +54,11 @@ Rules:
 4. Compare crime across districts as a rate per 100,000 population using
    district.population, never as a raw count, unless the user explicitly asks for
    raw counts.
-5. Always include the primary key of the main fact table in the SELECT list so each
-   row can be traced back to its source record.
+5. When the query returns individual records, include the primary key of the main
+   fact table so each row traces back to its source. When the query is an aggregate
+   (COUNT, SUM, AVG, a rate), do NOT add a bare primary key alongside the aggregate:
+   selecting a non-grouped column next to an aggregate is an error on PostgreSQL and
+   silently returns an arbitrary row on SQLite. Group by every non-aggregated column.
 6. Prefer aggregates. Only return individual person rows when the question genuinely
    requires them, and never more than is needed to answer it.
 7. Placeholders of the form <ID_1> are redacted identifiers. Use them verbatim inside
@@ -80,7 +85,12 @@ _RESPONSE_SCHEMA: dict[str, Any] = {
         },
         "explanation": {
             "type": "string",
-            "description": "One or two sentences on what the query does, for the user.",
+            "description": (
+                "One sentence, for a police officer, on what the answer covers — e.g. "
+                "'Counts FIRs registered in each district, as a rate per 100,000 people.' "
+                "Describe the result, not the SQL. Never mention columns added for "
+                "traceability, LIMIT clauses, or any of the rules you were given."
+            ),
         },
         "unanswerable_reason": {
             "type": "string",
@@ -216,11 +226,37 @@ class OpenAICompatibleQueryPlanner:
     does not want one.
     """
 
-    def __init__(self, base_url: str, model: str, api_key: str = "", timeout: float = 120.0) -> None:
+    def __init__(
+        self,
+        base_url: str,
+        model: str,
+        api_key: str = "",
+        timeout: float = 120.0,
+        max_retries: int = 3,
+    ) -> None:
         self._base = base_url.rstrip("/")
         self.name = model
         self._api_key = api_key
         self._timeout = timeout
+        self._max_retries = max_retries
+
+    @staticmethod
+    def _retry_after(response: httpx.Response, default: float = 5.0, ceiling: float = 30.0) -> float:
+        """How long to wait after a 429, from the header or the message body."""
+        header = response.headers.get("retry-after")
+        if header:
+            try:
+                return min(float(header), ceiling)
+            except ValueError:
+                pass
+        # Groq puts it in prose: "Please try again in 13.4775s."
+        match = re.search(r"try again in ([\d.]+)s", response.text)
+        if match:
+            try:
+                return min(float(match.group(1)) + 0.5, ceiling)
+            except ValueError:
+                pass
+        return default
 
     def plan(self, question: str, source: str, dialect: str) -> QueryPlan:
         headers = {"Content-Type": "application/json"}
@@ -248,11 +284,29 @@ class OpenAICompatibleQueryPlanner:
                 response = httpx.post(
                     f"{self._base}/chat/completions", json=body, headers=headers, timeout=self._timeout
                 )
+            # Free tiers meter tokens per minute, and the schema prompt is most of
+            # each request — Groq's 8k TPM allows roughly four questions a minute.
+            # The 429 body says how long to wait, so wait that long rather than
+            # surfacing a failure the user can only fix by asking again.
+            for _ in range(self._max_retries):
+                if response.status_code != 429:
+                    break
+                delay = self._retry_after(response)
+                log.info("Rate limited by %s; retrying in %.1fs", self._base, delay)
+                time.sleep(delay)
+                response = httpx.post(
+                    f"{self._base}/chat/completions", json=body, headers=headers, timeout=self._timeout
+                )
         except httpx.ConnectError as exc:
             raise PlannerUnavailable(f"Could not reach the model endpoint at {self._base}.") from exc
         except httpx.HTTPError as exc:
             raise PlannerUnavailable(f"Model request failed: {exc}") from exc
 
+        if response.status_code == 429:
+            raise PlannerUnavailable(
+                "The model provider is rate limiting this key. Free tiers meter tokens per "
+                "minute and the schema prompt is most of each request — wait a moment and ask again."
+            )
         if response.status_code >= 400:
             raise PlannerUnavailable(f"Model endpoint returned {response.status_code}: {response.text[:300]}")
 

@@ -31,18 +31,20 @@ class Settings(BaseSettings):
     ask_enabled: bool = True
     ask_default_source: str = "local"  # "local" (this backend's DB) | "catalyst"
 
-    # Default is the free, local, keyless option — which is also the one
-    # DATA-AND-MODELS.md mandates ("self-hosted models only").
-    ask_provider: str = "ollama"  # ollama | openai_compatible | anthropic
+    # Groq's free tier is the default: benchmarked 7/7 on the question set at
+    # ~670 ms, against 5/7 at ~13 s for the best OpenRouter free model.
+    # Switch to "ollama" for the fully self-hosted path DATA-AND-MODELS.md
+    # mandates — slower to set up, but the question never leaves the machine.
+    ask_provider: str = "openai_compatible"  # openai_compatible | ollama | anthropic
+
+    # openai_compatible — any chat-completions endpoint (Groq, OpenRouter, vLLM).
+    openai_compatible_base_url: str = "https://api.groq.com/openai/v1"
+    openai_compatible_model: str = "llama-3.3-70b-versatile"
+    openai_compatible_api_key: str = ""
 
     # ollama — free, runs on your machine, nothing leaves it.
     ollama_host: str = "http://127.0.0.1:11434"
     ollama_model: str = "qwen2.5-coder:7b"
-
-    # openai_compatible — any chat-completions endpoint (free tier, vLLM, LM Studio).
-    openai_compatible_base_url: str = ""
-    openai_compatible_model: str = ""
-    openai_compatible_api_key: str = ""
 
     # anthropic — paid; only used when ask_provider is "anthropic".
     anthropic_api_key: str = ""

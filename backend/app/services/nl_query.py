@@ -94,6 +94,23 @@ def _collect_evidence(rows: list[dict[str, Any]]) -> list[str]:
     return evidence
 
 
+def _first_sentence(text: str) -> str:
+    """Keep the first sentence of the model's explanation and drop the rest.
+
+    Smaller models narrate their own SQL no matter how the prompt is worded —
+    "This query joins X with Y, then groups by Z…". The first sentence is
+    reliably the useful one; the rest is the model explaining itself to itself.
+    Trimming here rather than in the prompt means it holds for every provider.
+    """
+    cleaned = " ".join((text or "").split())
+    if not cleaned:
+        return ""
+    for i, ch in enumerate(cleaned):
+        if ch == "." and i + 1 < len(cleaned) and cleaned[i + 1] == " ":
+            return cleaned[: i + 1]
+    return cleaned if cleaned.endswith(".") else cleaned + "."
+
+
 def _summarise(question: str, plan: QueryPlan, columns: list[str], rows: list[dict[str, Any]]) -> str:
     """Compose the user-facing answer from the result set, in code.
 
@@ -101,7 +118,7 @@ def _summarise(question: str, plan: QueryPlan, columns: list[str], rows: list[di
     result — a scalar reads as a sentence, a small table reads as a list, a
     large one reads as a count plus its head.
     """
-    explanation = plan.explanation.strip()
+    explanation = _first_sentence(plan.explanation)
 
     if not rows:
         base = "No records matched that question."
