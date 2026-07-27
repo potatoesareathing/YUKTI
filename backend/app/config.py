@@ -35,16 +35,24 @@ class Settings(BaseSettings):
     # ~670 ms, against 5/7 at ~13 s for the best OpenRouter free model.
     # Switch to "ollama" for the fully self-hosted path DATA-AND-MODELS.md
     # mandates — slower to set up, but the question never leaves the machine.
-    ask_provider: str = "openai_compatible"  # openai_compatible | ollama | anthropic
-
-    # openai_compatible — any chat-completions endpoint (Groq, OpenRouter, vLLM).
-    openai_compatible_base_url: str = "https://api.groq.com/openai/v1"
-    openai_compatible_model: str = "llama-3.3-70b-versatile"
-    openai_compatible_api_key: str = ""
+    # Ollama by default, because DATA-AND-MODELS.md makes "self-hosted models
+    # only" a hard constraint and CIAP §10 requires processing to stay inside
+    # Indian jurisdiction. A hosted endpoint is faster — Groq benchmarked 7/7 at
+    # ~670 ms against ~3.2 s for the best free hosted alternative — but choosing
+    # it means the question text leaves the country, so it has to be an explicit
+    # opt-in in .env rather than the shipped default.
+    ask_provider: str = "ollama"  # ollama | openai_compatible | anthropic
 
     # ollama — free, runs on your machine, nothing leaves it.
     ollama_host: str = "http://127.0.0.1:11434"
     ollama_model: str = "qwen2.5-coder:7b"
+
+    # openai_compatible — any chat-completions endpoint. Blank by design: set
+    # these in .env only if you have accepted that the question leaves the
+    # jurisdiction. Rows never do, under any provider.
+    openai_compatible_base_url: str = ""
+    openai_compatible_model: str = ""
+    openai_compatible_api_key: str = ""
 
     # anthropic — paid; only used when ask_provider is "anthropic".
     anthropic_api_key: str = ""

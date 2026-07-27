@@ -139,11 +139,26 @@ Then nothing else is required — `ASK_PROVIDER=ollama` is the default.
 
 Three providers are available, all producing the same plan:
 
-| `ASK_PROVIDER` | Cost | Question leaves the machine? |
-|---|---|---|
-| `ollama` (default) | Free | **No** |
-| `openai_compatible` | Depends on the endpoint | Yes, unless the endpoint is yours |
-| `anthropic` | Paid | Yes (schema + question; never rows) |
+| `ASK_PROVIDER` | Cost | Question leaves the machine? | Satisfies §10 as written? |
+|---|---|---|---|
+| `ollama` (default) | Free | **No** | **Yes** |
+| `openai_compatible` | Depends on the endpoint | Yes, unless the endpoint is yours | Only if self-hosted |
+| `anthropic` | Paid | Yes (schema + question; never rows) | No |
+
+**Choosing a hosted provider is a compliance decision, not a performance one.**
+Measured on the assistant's own question set: Groq `llama-3.3-70b-versatile`
+scored 7/7 at ~670 ms, OpenRouter `ling-3.0-flash:free` 7/7 at ~3.2 s. Both are
+far quicker than a 7B model on CPU. But DATA-AND-MODELS.md states "self-hosted
+models only" without qualification, and CIAP §10 requires processing to stay
+inside Indian jurisdiction — and Groq, OpenRouter and Anthropic are all outside
+it.
+
+The mitigation in this design is real: the model receives the schema and the
+question, never a row, and never FIR text. That is a much weaker exposure than
+a retrieval chatbot. It is **not** the same as complying with the constraint as
+written. So the shipped default is the self-hosted one, and pointing
+`OPENAI_COMPATIBLE_BASE_URL` at a third party is a deliberate act recorded in
+your own `.env`.
 
 `openai_compatible` covers free hosted tiers and self-hosted servers (vLLM,
 LM Studio, llama.cpp) with the same code path — set a base URL and a model, and
