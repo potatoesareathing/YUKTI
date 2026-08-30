@@ -27,7 +27,19 @@ CRIME_CATEGORIES: list[CrimeCategory] = [
 ]
 
 CaseStatus = Literal["Under Investigation", "Chargesheeted", "Disposed", "Untraced"]
-NodeKind = Literal["Person", "Incident", "Location", "Vehicle", "Organisation"]
+NodeKind = Literal[
+    "Person",
+    "Incident",
+    "Location",
+    "Vehicle",
+    "Organisation",
+    "Suspect",
+    "Victim",
+    "CDR_Phone",
+    "ANPR_Vehicle",
+    "BankAccount",
+    "IMEI",
+]
 EdgeKind = Literal[
     "ACCUSED_IN",
     "VICTIM_OF",
@@ -37,6 +49,11 @@ EdgeKind = Literal[
     "SAME_MO_AS",
     "MEMBER_OF",
     "CO_ACCUSED_WITH",
+    "CALLED",
+    "SIGHTED_AT",
+    "TRANSFERRED_FUNDS_TO",
+    "USES_IMEI",
+    "CO_ACCUSED_IN",
 ]
 RiskBand = Literal["low", "moderate", "high", "critical"]
 EvidenceKind = Literal["incident", "person", "series", "feature"]
@@ -103,6 +120,11 @@ class GraphEdge(BaseModel):
     weight: float
     predicted: Optional[bool] = None
     confidence: Optional[float] = None
+    timestamp: Optional[int] = None
+    confidence_score: Optional[float] = None
+    frequency: Optional[int] = None
+    location_lat_lng: Optional[tuple[float, float]] = None
+    source_reference_id: Optional[str] = None
 
 
 class GraphData(BaseModel):

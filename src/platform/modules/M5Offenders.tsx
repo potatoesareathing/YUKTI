@@ -1,8 +1,9 @@
 import { Field, Stat } from '@/ui/primitives'
 import { PALETTE } from '@/lib/palette'
 import { shortDate } from '@/lib/format'
-import type { OffenderProfile } from '@/data/api'
+import { downloadDossierPdf, type OffenderProfile } from '@/data/api'
 import type { Evidence } from '@/data/types'
+import { useState } from 'react'
 
 /**
  * Repeat-offender profiles — §7.2's "visual profiles that link an individual to
@@ -24,6 +25,21 @@ interface Props {
 
 export function OffenderPanel({ offenders, selected, onSelect, onEvidence }: Props) {
   const crossJurisdiction = offenders.filter((o) => o.districts.length > 1).length
+  const [exporting, setExporting] = useState(false)
+  const [exportError, setExportError] = useState<string | null>(null)
+
+  async function onExportDossier() {
+    if (!selected) return
+    setExporting(true)
+    setExportError(null)
+    try {
+      await downloadDossierPdf(selected.person.id)
+    } catch (err) {
+      setExportError(err instanceof Error ? err.message : 'Export failed')
+    } finally {
+      setExporting(false)
+    }
+  }
 
   return (
     <>
@@ -161,10 +177,22 @@ export function OffenderPanel({ offenders, selected, onSelect, onEvidence }: Pro
 
             <button
               onClick={() => onEvidence(offenderEvidence(selected))}
-              className="label w-full border border-brass/50 px-3 py-2 text-brass transition-colors hover:bg-brass/12"
+              className="label mb-2 w-full border border-brass/50 px-3 py-2 text-brass transition-colors hover:bg-brass/12"
             >
               Show the {selected.incidents.length} linked records
             </button>
+
+            <button
+              onClick={onExportDossier}
+              disabled={exporting}
+              className="label w-full border border-khaki/40 bg-brass/15 px-3 py-2.5 text-brass-lit transition-colors hover:bg-brass/25 disabled:opacity-60"
+              style={{ fontWeight: 600 }}
+            >
+              {exporting ? 'Generating KSP dossier…' : 'Export KSP Dossier (PDF)'}
+            </button>
+            {exportError && (
+              <p className="mt-2 text-[0.72rem] text-redzone">{exportError}</p>
+            )}
 
             <p className="mt-3 border-l border-brass/40 pl-3 text-[0.74rem] leading-relaxed text-khaki-dim">
               A shared modus operandi links METHODS, not people. It indicates where to look for a

@@ -74,6 +74,14 @@ interface YuktiState {
   showPredicted: boolean
   toggleLayer: (k: 'showHotspots' | 'showIncidents' | 'showLabels' | 'showPredicted') => void
 
+  /** Multi-source graph layer filters (MOD-02). */
+  showCdrLinks: boolean
+  showAnprHits: boolean
+  showBankTx: boolean
+  toggleGraphLayer: (k: 'showCdrLinks' | 'showAnprHits' | 'showBankTx') => void
+  syndicateHighlight: string[]
+  setSyndicateHighlight: (ids: string[]) => void
+
   /* Evidence drawer — the §10.3 affordance */
   evidence: EvidenceContext | null
   openEvidence: (e: EvidenceContext) => void
@@ -136,6 +144,13 @@ export const useYukti = create<YuktiState>((set, get) => ({
   showLabels: true,
   showPredicted: false,
   toggleLayer: (k) => set((s) => ({ [k]: !s[k] }) as Pick<YuktiState, typeof k>),
+
+  showCdrLinks: true,
+  showAnprHits: true,
+  showBankTx: true,
+  toggleGraphLayer: (k) => set((s) => ({ [k]: !s[k] }) as Pick<YuktiState, typeof k>),
+  syndicateHighlight: [],
+  setSyndicateHighlight: (syndicateHighlight) => set({ syndicateHighlight }),
 
   evidence: null,
   openEvidence: (evidence) => set({ evidence }),

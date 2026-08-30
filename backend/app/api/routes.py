@@ -51,6 +51,10 @@ def _audit_async(db: Session, user: str, action: str, path: str, refs: list | No
         db.rollback()
 
 
+def _uid(user) -> str:
+    return getattr(user, "user_id", None) or str(user)
+
+
 @router.get("/health")
 def health():
     return ok({"status": "ok"})
@@ -208,5 +212,5 @@ def bootstrap_route(user: UserDep, db: Session = Depends(get_db)):
 
 @router.post("/audit")
 def audit_write(body: AuditBody, request: Request, user: UserDep, db: Session = Depends(get_db)):
-    _audit_async(db, user, body.action, request.url.path, body.resource_refs, body.detail)
+    _audit_async(db, _uid(user), body.action, request.url.path, body.resource_refs, body.detail)
     return ok({"logged": True})

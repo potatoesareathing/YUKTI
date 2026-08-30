@@ -1,5 +1,5 @@
-import { commonNeighbours, edgeLabel, getCommunities, getNetwork, shortestPath, suggestedOrigins } from '@/data/api'
-import { useEffect, useMemo } from 'react'
+import { commonNeighbours, edgeLabel, findSyndicatePath, getCommunities, getNetwork, shortestPath, suggestedOrigins } from '@/data/api'
+import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Panel, Stat, Field, Empty, Tag, DecisionSupportNote } from '@/ui/primitives'
 import { useYukti } from '@/store/useYukti'
@@ -35,10 +35,17 @@ export function M2Network({ ready }: { ready: boolean }) {
   const clearPath = useYukti((s) => s.clearPath)
   const showPredicted = useYukti((s) => s.showPredicted)
   const toggleLayer = useYukti((s) => s.toggleLayer)
+  const showCdrLinks = useYukti((s) => s.showCdrLinks)
+  const showAnprHits = useYukti((s) => s.showAnprHits)
+  const showBankTx = useYukti((s) => s.showBankTx)
+  const toggleGraphLayer = useYukti((s) => s.toggleGraphLayer)
+  const setSyndicateHighlight = useYukti((s) => s.setSyndicateHighlight)
   const openEvidence = useEvidence()
   const districtFilter = useYukti((s) => s.selectedDistrict)
   const selectDistrict = useYukti((s) => s.selectDistrict)
   const navigate = useNavigate()
+  const [syndicateBusy, setSyndicateBusy] = useState(false)
+  const [syndicateNote, setSyndicateNote] = useState<string | null>(null)
 
   // Parent remounts this module via dataEpoch after bootstrap; read caches fresh.
   const graph = useMemo(() => getNetwork(), [])
@@ -134,6 +141,28 @@ export function M2Network({ ready }: { ready: boolean }) {
     ? graph.nodes.filter((n) => n.district === districtFilter).length
     : 0
 
+  async function runSyndicateFinder() {
+    if (!pathFrom || !pathTo) return
+    setSyndicateBusy(true)
+    setSyndicateNote(null)
+    try {
+      const result = await findSyndicatePath(pathFrom, pathTo)
+      if (!result.found) {
+        setSyndicateHighlight([])
+        setSyndicateNote('No multi-source path found across phones, vehicles, or accounts.')
+        return
+      }
+      setSyndicateHighlight(result.nodes.map((n) => n.id))
+      setSyndicateNote(
+        `Syndicate path: ${result.hops} hop(s) via shared CDR / ANPR / finance links.`,
+      )
+    } catch (err) {
+      setSyndicateNote(err instanceof Error ? err.message : 'Syndicate search failed')
+    } finally {
+      setSyndicateBusy(false)
+    }
+  }
+
   return (
     <div className="grid h-full grid-cols-1 gap-3 p-3 lg:grid-cols-[280px_1fr_320px]">
       <div className="pointer-events-auto hidden min-h-0 flex-col gap-3 overflow-y-auto pr-1 lg:flex">
@@ -162,6 +191,59 @@ export function M2Network({ ready }: { ready: boolean }) {
             </button>
           </div>
         )}
+
+        <Panel title="Multi-source layers" reference="CDR · ANPR · Finance" className="shrink-0">
+          <div className="flex flex-col gap-2 p-3">
+            <label className="flex items-center gap-2 text-[0.78rem] text-khaki">
+              <input
+                type="checkbox"
+                checked={showCdrLinks}
+                onChange={() => toggleGraphLayer('showCdrLinks')}
+              />
+              Show Phone Links (CDR)
+            </label>
+            <label className="flex items-center gap-2 text-[0.78rem] text-khaki">
+              <input
+                type="checkbox"
+                checked={showAnprHits}
+                onChange={() => toggleGraphLayer('showAnprHits')}
+              />
+              Show Vehicle Hits (ANPR)
+            </label>
+            <label className="flex items-center gap-2 text-[0.78rem] text-khaki">
+              <input
+                type="checkbox"
+                checked={showBankTx}
+                onChange={() => toggleGraphLayer('showBankTx')}
+              />
+              Show Bank Transactions
+            </label>
+            <button
+              type="button"
+              disabled={!pathFrom || !pathTo || syndicateBusy}
+              onClick={runSyndicateFinder}
+              className="label mt-1 border border-brass/50 px-2 py-2 text-brass transition-colors hover:bg-brass/12 disabled:opacity-50"
+            >
+              {syndicateBusy ? 'Finding syndicate path…' : 'Automated Syndicate Cluster Finder'}
+            </button>
+            {syndicateNote && (
+              <p className="text-[0.72rem] leading-relaxed text-khaki-dim">{syndicateNote}</p>
+            )}
+            <div className="mt-1 flex flex-wrap gap-2">
+              {[
+                ['CDR_Phone', 'Phone'],
+                ['ANPR_Vehicle', 'Vehicle'],
+                ['BankAccount', 'Bank'],
+                ['Suspect', 'Suspect'],
+              ].map(([k, label]) => (
+                <span key={k} className="flex items-center gap-1 text-[0.7rem] text-khaki-dim">
+                  <span className="inline-block h-2 w-2 rounded-sm" style={{ background: KIND_COLOR[k] }} />
+                  {label}
+                </span>
+              ))}
+            </div>
+          </div>
+        </Panel>
 
         <Panel title="Start here" reference="Most connected" ticked className="shrink-0">
           <div className="border-b border-rule px-3 py-2">

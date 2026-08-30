@@ -546,6 +546,43 @@ export function edgeLabel(kind: EdgeKind): string {
   return kind.replace(/_/g, ' ').toLowerCase()
 }
 
+/** Download KSP Criminal History / Rowdy-Sheet PDF for a suspect (offender) id. */
+export async function downloadDossierPdf(suspectId: string): Promise<void> {
+  const res = await fetch(`${BASE}/api/v1/suspects/${encodeURIComponent(suspectId)}/dossier-pdf`)
+  if (!res.ok) {
+    const text = await res.text()
+    throw new Error(text || `Dossier export failed (${res.status})`)
+  }
+  const blob = await res.blob()
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = `KSP_Dossier_${suspectId}.pdf`
+  document.body.appendChild(a)
+  a.click()
+  a.remove()
+  URL.revokeObjectURL(url)
+}
+
+/** Multi-source syndicate shortest path across phones / vehicles / accounts. */
+export async function findSyndicatePath(
+  a: string,
+  b: string,
+  maxHops = 6,
+): Promise<{ found: boolean; hops: number; nodes: GraphNode[]; edges: GraphEdge[] }> {
+  const res = await fetch(
+    `${BASE}/api/v1/graph/syndicate-path?a=${encodeURIComponent(a)}&b=${encodeURIComponent(b)}&maxHops=${maxHops}`,
+  )
+  if (!res.ok) throw new Error(`Syndicate path failed (${res.status})`)
+  const env = (await res.json()) as Envelope<{
+    found: boolean
+    hops: number
+    nodes: GraphNode[]
+    edges: GraphEdge[]
+  }>
+  return env.data
+}
+
 /** Log evidence-drawer opens — §10.1 */
 export async function logAudit(action: string, resourceRefs: string[], detail = ''): Promise<void> {
   try {

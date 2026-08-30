@@ -1,4 +1,5 @@
 import { Color } from 'three'
+import type { EdgeKind } from '@/data/types'
 
 /**
  * The palette, mirrored from globals.css so three.js materials and DOM stay in
@@ -73,8 +74,32 @@ export const BAND_LABEL: Record<RiskBand, string> = {
 /** Entity-kind accents, used by the node inspector and the detail layer. */
 export const KIND_COLOR: Record<string, string> = {
   Organisation: PALETTE.brassLit,
-  Person: PALETTE.brass,
+  Person: '#3A3A3A',
+  Suspect: '#2C2C2C',
+  Victim: '#6A6356',
   Location: '#A98A2E',
   Incident: '#7E93A3',
   Vehicle: '#6A6356',
+  CDR_Phone: '#2F6FED',
+  ANPR_Vehicle: '#C62828',
+  BankAccount: '#2E7D32',
+  IMEI: '#5C6BC0',
+}
+
+/** Edge-layer filters for multi-source link analysis. */
+export const EDGE_LAYER: Record<'cdr' | 'anpr' | 'finance' | 'core', EdgeKind[]> = {
+  cdr: ['CALLED', 'USES_IMEI'],
+  anpr: ['SIGHTED_AT'],
+  finance: ['TRANSFERRED_FUNDS_TO'],
+  core: [
+    'ACCUSED_IN',
+    'VICTIM_OF',
+    'WITNESSED',
+    'OCCURRED_AT',
+    'ASSOCIATED_WITH',
+    'SAME_MO_AS',
+    'MEMBER_OF',
+    'CO_ACCUSED_WITH',
+    'CO_ACCUSED_IN',
+  ],
 }

@@ -21,8 +21,8 @@ import {
   type Group,
   type Mesh,
 } from 'three'
-import { KIND_COLOR, PALETTE } from '@/lib/palette'
-import type { GraphData, GraphNode, NodeKind } from '@/data/types'
+import { KIND_COLOR, EDGE_LAYER, PALETTE } from '@/lib/palette'
+import type { EdgeKind, GraphData, GraphNode, NodeKind } from '@/data/types'
 import { useYukti } from '@/store/useYukti'
 
 /**
@@ -161,6 +161,10 @@ export function GraphView({ revision = 0 }: { revision?: number }) {
    * from stops being navigable.
    */
   const districtFilter = useYukti((s) => s.selectedDistrict)
+  const showCdrLinks = useYukti((s) => s.showCdrLinks)
+  const showAnprHits = useYukti((s) => s.showAnprHits)
+  const showBankTx = useYukti((s) => s.showBankTx)
+  const syndicateHighlight = useYukti((s) => s.syndicateHighlight)
 
   const { camera } = useThree()
   const controls = useThree((state) => state.controls) as
@@ -175,15 +179,27 @@ export function GraphView({ revision = 0 }: { revision?: number }) {
   const [hovered, setHovered] = useState<string | null>(null)
 
   const focusIds = useMemo(
-    () => [selectedNode, pathFrom, pathTo].filter((id): id is string => !!id),
-    [selectedNode, pathFrom, pathTo],
+    () => [selectedNode, pathFrom, pathTo, ...syndicateHighlight].filter((id): id is string => !!id),
+    [selectedNode, pathFrom, pathTo, syndicateHighlight],
   )
 
+  const allowedKinds = useMemo(() => {
+    const kinds = new Set<EdgeKind>(EDGE_LAYER.core)
+    if (showCdrLinks) EDGE_LAYER.cdr.forEach((k) => kinds.add(k))
+    if (showAnprHits) EDGE_LAYER.anpr.forEach((k) => kinds.add(k))
+    if (showBankTx) EDGE_LAYER.finance.forEach((k) => kinds.add(k))
+    return kinds
+  }, [showCdrLinks, showAnprHits, showBankTx])
+
   // `revision` bumps when bootstrap hydrates so we never keep an empty mount snapshot.
-  const graph = useMemo(
-    () => pickViewGraph(getNetwork(), focusIds, districtFilter),
-    [revision, focusIds, districtFilter],
-  )
+  const graph = useMemo(() => {
+    const full = getNetwork()
+    const filtered: GraphData = {
+      nodes: full.nodes,
+      edges: full.edges.filter((e) => allowedKinds.has(e.kind)),
+    }
+    return pickViewGraph(filtered, focusIds, districtFilter)
+  }, [revision, focusIds, allowedKinds, districtFilter])
 
   /* The simulation, rebuilt when the visible subgraph changes. */
   const sim = useMemo(() => {
@@ -236,7 +252,7 @@ export function GraphView({ revision = 0 }: { revision?: number }) {
         // Obsidian sizes by link count; PageRank is the better measure here and
         // the panels already rank by it.
         size: 0.34 + Math.sqrt(node.degree) * 0.2 + node.centrality * 0.9,
-        color: new Color(KIND_COLOR[node.kind]),
+        color: new Color(KIND_COLOR[node.kind] || PALETTE.brass),
       })),
     [graph.nodes, sim],
   )

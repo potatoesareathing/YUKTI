@@ -224,3 +224,57 @@ class ApiSnapshot(Base):
     id: Mapped[str] = mapped_column(String(64), primary_key=True)
     payload: Mapped[dict | list] = mapped_column(JsonType)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, index=True)
+
+
+class CaseSensitiveNotes(Base):
+    """Column-level restricted fields — masked below INSPECTOR."""
+
+    __tablename__ = "case_sensitive_notes"
+
+    case_id: Mapped[str] = mapped_column(ForeignKey("case_master.id"), primary_key=True)
+    informant_details: Mapped[str] = mapped_column(Text, default="")
+    wiretap_logs: Mapped[str] = mapped_column(Text, default="")
+    active_surveillance_notes: Mapped[str] = mapped_column(Text, default="")
+
+
+class CourtCase(Base):
+    __tablename__ = "court_case"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    person_id: Mapped[str] = mapped_column(ForeignKey("person.id"), index=True)
+    case_number: Mapped[str] = mapped_column(String(64))
+    court_name: Mapped[str] = mapped_column(String(128), default="")
+    status: Mapped[str] = mapped_column(String(64), default="Pending")
+    bail_status: Mapped[str] = mapped_column(String(64), default="None")
+    ecourts_cnr: Mapped[str] = mapped_column(String(64), default="")
+
+
+class Warrant(Base):
+    __tablename__ = "warrant"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    person_id: Mapped[str] = mapped_column(ForeignKey("person.id"), index=True)
+    warrant_type: Mapped[str] = mapped_column(String(32), default="NBW")
+    issued_at: Mapped[int] = mapped_column(BigInteger, default=0)
+    status: Mapped[str] = mapped_column(String(32), default="Active")
+    court_name: Mapped[str] = mapped_column(String(128), default="")
+
+
+class RowdySheet(Base):
+    __tablename__ = "rowdy_sheet"
+
+    person_id: Mapped[str] = mapped_column(ForeignKey("person.id"), primary_key=True)
+    category: Mapped[str] = mapped_column(String(64), default="A")
+    opened_at: Mapped[int] = mapped_column(BigInteger, default=0)
+    notes: Mapped[str] = mapped_column(Text, default="")
+
+
+class DossierExport(Base):
+    """Immutable audit of KSP dossier PDF exports."""
+
+    __tablename__ = "dossier_exports"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    user_id: Mapped[str] = mapped_column(String(128), index=True)
+    suspect_id: Mapped[str] = mapped_column(String(32), index=True)
+    timestamp: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, index=True)

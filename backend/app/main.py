@@ -5,6 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 
 from app.api.routes import router
+from app.api.v1_routes import router as v1_router
 from app.config import get_settings
 from app.db import SessionLocal, init_db
 from app.services.snapshot import load, load_envelope_bytes, mem_set
@@ -44,7 +45,7 @@ async def lifespan(_app: FastAPI):
     yield
 
 
-app = FastAPI(title="YUKTI API", version="1.1.0", lifespan=lifespan)
+app = FastAPI(title="YUKTI API", version="1.2.0", lifespan=lifespan)
 app.add_middleware(GZipMiddleware, minimum_size=500)
 app.add_middleware(
     CORSMiddleware,
@@ -54,3 +55,4 @@ app.add_middleware(
     allow_headers=["*"],
 )
 app.include_router(router)
+app.include_router(v1_router)

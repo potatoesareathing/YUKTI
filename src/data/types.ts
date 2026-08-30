@@ -95,7 +95,18 @@ export interface DistrictMetrics {
 
 /* ── §9.2 Graph schema (Neo4j) ─────────────────────────────────────────────── */
 
-export type NodeKind = 'Person' | 'Incident' | 'Location' | 'Vehicle' | 'Organisation'
+export type NodeKind =
+  | 'Person'
+  | 'Incident'
+  | 'Location'
+  | 'Vehicle'
+  | 'Organisation'
+  | 'Suspect'
+  | 'Victim'
+  | 'CDR_Phone'
+  | 'ANPR_Vehicle'
+  | 'BankAccount'
+  | 'IMEI'
 
 export type EdgeKind =
   | 'ACCUSED_IN'
@@ -106,6 +117,11 @@ export type EdgeKind =
   | 'SAME_MO_AS'
   | 'MEMBER_OF'
   | 'CO_ACCUSED_WITH'
+  | 'CALLED'
+  | 'SIGHTED_AT'
+  | 'TRANSFERRED_FUNDS_TO'
+  | 'USES_IMEI'
+  | 'CO_ACCUSED_IN'
 
 export interface GraphNode {
   id: string
@@ -129,6 +145,11 @@ export interface GraphEdge {
   /** True where the edge is a GraphSAGE-predicted link, not an observed one. */
   predicted?: boolean
   confidence?: number
+  timestamp?: number
+  confidence_score?: number
+  frequency?: number
+  location_lat_lng?: [number, number]
+  source_reference_id?: string
 }
 
 export interface GraphData {
