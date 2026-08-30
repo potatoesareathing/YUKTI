@@ -173,6 +173,12 @@ function Masthead({
         </nav>
 
         <div className="hidden shrink-0 items-center gap-4 lg:flex">
+          <Link
+            to="/beat"
+            className="label border border-rule px-2 py-1 transition-colors hover:border-brass hover:text-brass"
+          >
+            Beat PWA
+          </Link>
           <div className="text-right">
             <div className="label" style={{ fontSize: 9 }}>
               Records

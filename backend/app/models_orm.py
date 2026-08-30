@@ -86,6 +86,15 @@ class CaseMaster(Base):
     anomaly: Mapped[bool] = mapped_column(Boolean, default=False)
     anomaly_score: Mapped[float] = mapped_column(Float, default=0.0)
     in_sample: Mapped[bool] = mapped_column(Boolean, default=True, index=True)
+    # CCTNS live-sync extensions (nullable for legacy Catalyst rows)
+    cctns_fir_id: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
+    police_station_code: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    fir_timestamp: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    crime_group_name: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    crime_head_name: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    raw_kannada_narrative: Mapped[str | None] = mapped_column(Text, nullable=True)
+    is_synced_realtime: Mapped[bool] = mapped_column(Boolean, default=False)
+    parsed_mo_metadata: Mapped[dict | None] = mapped_column(JsonType, nullable=True)
 
 
 class Person(Base):
@@ -278,3 +287,40 @@ class DossierExport(Base):
     user_id: Mapped[str] = mapped_column(String(128), index=True)
     suspect_id: Mapped[str] = mapped_column(String(32), index=True)
     timestamp: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, index=True)
+
+
+class CctnsFir(Base):
+    """CCTNS-ingested FIR mirror — primary live-sync store."""
+
+    __tablename__ = "cctns_fir"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)  # cctns_fir_id
+    case_id: Mapped[str | None] = mapped_column(ForeignKey("case_master.id"), nullable=True, index=True)
+    police_station_code: Mapped[str] = mapped_column(String(64), default="", index=True)
+    district_id: Mapped[str] = mapped_column(String(64), default="", index=True)
+    fir_timestamp: Mapped[int] = mapped_column(BigInteger, default=0, index=True)
+    crime_group_name: Mapped[str] = mapped_column(String(128), default="")
+    crime_head_name: Mapped[str] = mapped_column(String(128), default="")
+    lat: Mapped[float] = mapped_column(Float, default=0.0)
+    lng: Mapped[float] = mapped_column(Float, default=0.0)
+    raw_kannada_narrative: Mapped[str] = mapped_column(Text, default="")
+    is_synced_realtime: Mapped[bool] = mapped_column(Boolean, default=True)
+    parsed_mo_metadata: Mapped[dict | None] = mapped_column(JsonType, nullable=True)
+    source: Mapped[str] = mapped_column(String(32), default="webhook")  # webhook | poller | catalyst
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+
+class MoPatternAlert(Base):
+    """Cross-jurisdiction emerging MO pattern when similarity > threshold."""
+
+    __tablename__ = "mo_pattern_alert"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    fir_a_id: Mapped[str] = mapped_column(String(64), index=True)
+    fir_b_id: Mapped[str] = mapped_column(String(64), index=True)
+    district_a: Mapped[str] = mapped_column(String(128), default="")
+    district_b: Mapped[str] = mapped_column(String(128), default="")
+    score: Mapped[float] = mapped_column(Float, default=0.0)
+    shared_tags: Mapped[list] = mapped_column(JsonType, default=list)
+    payload: Mapped[dict] = mapped_column(JsonType, default=dict)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, index=True)

@@ -24,6 +24,12 @@ class Settings(BaseSettings):
     db_pool_size: int = 10
     db_max_overflow: int = 20
     environment: str = "development"
+    # CCTNS live-sync
+    cctns_api_key: str = "yukti-cctns-dev-key"
+    cctns_ip_allowlist: str = ""  # comma-separated; empty = allow all (dev)
+    cctns_staging_url: str = ""  # optional external poll URL
+    cctns_poll_seconds: int = 60
+    mo_match_threshold: float = 0.80
 
     @property
     def cors_origin_list(self) -> list[str]:

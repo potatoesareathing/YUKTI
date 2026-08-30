@@ -583,6 +583,96 @@ export async function findSyndicatePath(
   return env.data
 }
 
+export type LiveFirEvent = {
+  event?: string
+  cctns_fir_id?: string
+  district_id?: string
+  crime_head_name?: string
+  lat?: number
+  lng?: number
+  fir_timestamp?: number
+  parsed_mo_metadata?: Record<string, unknown>
+  mo_alerts?: MoPatternAlert[]
+  type?: string
+  score_pct?: number
+  comparison?: MoComparison
+}
+
+export type MoPatternAlert = {
+  id?: string
+  type?: string
+  fir_a?: string
+  fir_b?: string
+  district_a?: string
+  district_b?: string
+  score?: number
+  score_pct?: number
+  shared_tags?: string[]
+  comparison?: MoComparison
+}
+
+export type MoComparison = {
+  a: { id: string; district: string; crime_head?: string; mo?: Record<string, unknown>; narrative?: string }
+  b: { id: string; district: string; crime_head?: string; mo?: Record<string, unknown>; narrative?: string }
+}
+
+export function subscribeCctnsLive(onEvent: (ev: LiveFirEvent) => void): () => void {
+  const es = new EventSource(`${BASE}/api/v1/cctns/stream`)
+  const handler = (e: MessageEvent) => {
+    try {
+      onEvent(JSON.parse(String(e.data)) as LiveFirEvent)
+    } catch {
+      /* ignore */
+    }
+  }
+  es.addEventListener('fir', handler as EventListener)
+  es.onerror = () => {
+    /* browser auto-reconnects */
+  }
+  return () => es.close()
+}
+
+export async function fetchBeatFeed(lat: number, lng: number, radiusKm = 2) {
+  const res = await fetch(
+    `${BASE}/api/v1/beat/feed?lat=${lat}&lng=${lng}&radiusKm=${radiusKm}`,
+  )
+  if (!res.ok) throw new Error(`Beat feed failed (${res.status})`)
+  const env = (await res.json()) as Envelope<Record<string, unknown>>
+  return env.data
+}
+
+export async function checkGeofence(lat: number, lng: number) {
+  const res = await fetch(`${BASE}/api/v1/beat/geofence-check`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ lat, lng }),
+  })
+  if (!res.ok) throw new Error(`Geofence check failed (${res.status})`)
+  const env = (await res.json()) as Envelope<{
+    inside: boolean
+    zones: Array<{ alert_template?: string; label?: string; distance_m?: number }>
+  }>
+  return env.data
+}
+
+export async function fetchMoPatternAlerts(limit = 30): Promise<MoPatternAlert[]> {
+  const res = await fetch(`${BASE}/api/v1/mo/pattern-alerts?limit=${limit}`)
+  if (!res.ok) return []
+  const env = (await res.json()) as Envelope<MoPatternAlert[]>
+  return env.data ?? []
+}
+
+export async function extractMoNarrative(narrative: string) {
+  const res = await fetch(`${BASE}/api/v1/nlp/extract-mo`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ raw_kannada_narrative: narrative }),
+  })
+  if (!res.ok) throw new Error(`NLP extract failed (${res.status})`)
+  const env = (await res.json()) as Envelope<Record<string, unknown>>
+  return env.data
+}
+
 /** Log evidence-drawer opens — §10.1 */
 export async function logAudit(action: string, resourceRefs: string[], detail = ''): Promise<void> {
   try {

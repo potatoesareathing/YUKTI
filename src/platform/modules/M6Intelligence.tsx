@@ -1,7 +1,8 @@
-import { DRIFT_THRESHOLD, getAnomalies, getModelCards } from '@/data/api'
+import { DRIFT_THRESHOLD, fetchMoPatternAlerts, getAnomalies, getModelCards, type MoPatternAlert } from '@/data/api'
 import { useEffect, useMemo, useState } from 'react'
 import { Panel, Stat, Bar, DecisionSupportNote, Empty } from '@/ui/primitives'
 import { useEvidence } from '@/ui/EvidenceDrawer'
+import { MoCompareModal } from '@/ui/MoCompareModal'
 import { PALETTE } from '@/lib/palette'
 import { pct, shortDate } from '@/lib/format'
 import type { AnomalyFlag, ModelCard } from '@/data/types'
@@ -28,6 +29,8 @@ const STATUS_STYLE: Record<ModelCard['status'], { color: string; glyph: string }
 
 export function M6Intelligence() {
   const [anomalies, setAnomalies] = useState<AnomalyFlag[]>([])
+  const [moAlerts, setMoAlerts] = useState<MoPatternAlert[]>([])
+  const [compare, setCompare] = useState<MoPatternAlert | null>(null)
   const models = useMemo(() => getModelCards(), [])
   const openEvidence = useEvidence()
 
@@ -35,6 +38,9 @@ export function M6Intelligence() {
     let live = true
     getAnomalies(20).then((a) => {
       if (live) setAnomalies(a)
+    })
+    fetchMoPatternAlerts(30).then((a) => {
+      if (live) setMoAlerts(a)
     })
     return () => {
       live = false
@@ -201,7 +207,38 @@ export function M6Intelligence() {
             <Empty>Loading anomaly flags.</Empty>
           )}
         </Panel>
+
+        <Panel title="Emerging MO patterns" reference="SCRB · >80%" ticked>
+          {moAlerts.length === 0 ? (
+            <Empty>No cross-jurisdiction MO matches above threshold yet.</Empty>
+          ) : (
+            <ul className="divide-y divide-rule/50">
+              {moAlerts.map((a) => (
+                <li key={a.id || `${a.fir_a}-${a.fir_b}`}>
+                  <button
+                    className="w-full px-3 py-2.5 text-left transition-colors hover:bg-brass/[0.06]"
+                    onClick={() => setCompare(a)}
+                  >
+                    <div className="mb-1 flex items-baseline justify-between gap-2">
+                      <span className="text-[0.78rem] text-khaki">
+                        {a.district_a} ↔ {a.district_b}
+                      </span>
+                      <span className="tnum" style={{ fontSize: 11, color: PALETTE.redzone }}>
+                        {a.score_pct ?? Math.round((a.score || 0) * 100)}%
+                      </span>
+                    </div>
+                    <p className="text-[0.72rem] text-khaki-dim">
+                      {(a.shared_tags || []).slice(0, 4).join(' · ') || 'Open side-by-side comparison'}
+                    </p>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </Panel>
       </div>
+
+      {compare && <MoCompareModal alert={compare} onClose={() => setCompare(null)} />}
     </div>
   )
 }

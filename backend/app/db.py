@@ -50,3 +50,25 @@ def init_db() -> None:
     from app import models_orm  # noqa: F401
 
     Base.metadata.create_all(bind=engine)
+    _migrate_sqlite_case_master_cctns()
+
+
+def _migrate_sqlite_case_master_cctns() -> None:
+    """Add CCTNS columns to existing SQLite case_master without rebuild."""
+    if not settings.database_url.startswith("sqlite"):
+        return
+    cols = {
+        "cctns_fir_id": "VARCHAR(64)",
+        "police_station_code": "VARCHAR(64)",
+        "fir_timestamp": "BIGINT",
+        "crime_group_name": "VARCHAR(128)",
+        "crime_head_name": "VARCHAR(128)",
+        "raw_kannada_narrative": "TEXT",
+        "is_synced_realtime": "BOOLEAN DEFAULT 0",
+        "parsed_mo_metadata": "JSON",
+    }
+    with engine.begin() as conn:
+        existing = {row[1] for row in conn.exec_driver_sql("PRAGMA table_info(case_master)").fetchall()}
+        for name, ddl in cols.items():
+            if name not in existing:
+                conn.exec_driver_sql(f"ALTER TABLE case_master ADD COLUMN {name} {ddl}")

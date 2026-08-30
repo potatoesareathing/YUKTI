@@ -1,4 +1,4 @@
-import { getCategorySeries, getDistrictMetrics, getStations, peekStations, stateTotals, type StationMetrics } from '@/data/api'
+import { getCategorySeries, getDistrictMetrics, getStations, peekStations, stateTotals, subscribeCctnsLive, type StationMetrics } from '@/data/api'
 import { useEffect, useMemo, useState } from 'react'
 import { Panel, Stat, Field, Tag, RiskPill, Empty } from '@/ui/primitives'
 import { RankedBars, Sparkline } from '@/ui/charts'
@@ -33,6 +33,27 @@ export function M1Geospatial({ ready, onPick }: Props) {
   const selectedStation = useYukti((s) => s.selectedStation)
   const selectStation = useYukti((s) => s.selectStation)
   const [stations, setStations] = useState<StationMetrics[]>([])
+  const [liveFirs, setLiveFirs] = useState<
+    Array<{ id: string; district: string; head: string; at: number }>
+  >([])
+
+  useEffect(() => {
+    return subscribeCctnsLive((ev) => {
+      if (ev.event === 'fir_ingested' && ev.cctns_fir_id) {
+        setLiveFirs((prev) =>
+          [
+            {
+              id: ev.cctns_fir_id!,
+              district: String(ev.district_id || ''),
+              head: String(ev.crime_head_name || 'FIR'),
+              at: Number(ev.fir_timestamp || Date.now()),
+            },
+            ...prev,
+          ].slice(0, 12),
+        )
+      }
+    })
+  }, [])
 
   useEffect(() => {
     let live = true
@@ -110,6 +131,25 @@ export function M1Geospatial({ ready, onPick }: Props) {
                 Show all categories
               </button>
             </div>
+          )}
+        </Panel>
+
+        <Panel title="CCTNS live" reference="SSE" className="shrink-0">
+          {liveFirs.length === 0 ? (
+            <p className="px-3 py-3 text-[0.74rem] text-khaki-dim">
+              Waiting for realtime FIR webhook / poller events…
+            </p>
+          ) : (
+            <ul className="max-h-48 divide-y divide-rule/50 overflow-y-auto">
+              {liveFirs.map((f) => (
+                <li key={f.id} className="px-3 py-2">
+                  <div className="truncate text-[0.78rem] text-khaki">{f.head}</div>
+                  <div className="label" style={{ fontSize: 9 }}>
+                    {f.district} · live
+                  </div>
+                </li>
+              ))}
+            </ul>
           )}
         </Panel>
 

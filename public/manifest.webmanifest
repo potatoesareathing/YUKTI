@@ -1,0 +1,18 @@
+{
+  "name": "YUKTI Beat Dispatch",
+  "short_name": "YUKTI Beat",
+  "description": "Karnataka State Police mobile beat feed — warrants, suspects, geofenced red zones.",
+  "start_url": "/beat",
+  "display": "standalone",
+  "background_color": "#070A0F",
+  "theme_color": "#070A0F",
+  "lang": "en",
+  "icons": [
+    {
+      "src": "/beat-icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

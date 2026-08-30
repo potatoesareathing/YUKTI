@@ -45,12 +45,21 @@ async def lifespan(_app: FastAPI):
 
         result = ensure_multisource_overlay(db)
         print(f"multisource overlay: {result.get('status')} multi={result.get('multi_source_nodes')}")
+
+        from app.services import cctns as cctns_svc
+
+        hyd = cctns_svc.hydrate_from_catalyst(db)
+        print(f"cctns hydrate: {hyd}")
     finally:
         db.close()
+
+    from app.services.cctns import start_cctns_poller
+
+    start_cctns_poller()
     yield
 
 
-app = FastAPI(title="YUKTI API", version="1.2.1", lifespan=lifespan)
+app = FastAPI(title="YUKTI API", version="1.3.0", lifespan=lifespan)
 app.add_middleware(GZipMiddleware, minimum_size=500)
 app.add_middleware(
     CORSMiddleware,
