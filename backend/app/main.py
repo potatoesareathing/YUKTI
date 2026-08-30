@@ -70,3 +70,40 @@ app.add_middleware(
 )
 app.include_router(router)
 app.include_router(v1_router)
+
+
+def _api_index() -> dict:
+    return {
+        "service": "YUKTI API",
+        "version": app.version,
+        "status": "ok",
+        "links": {
+            "health": "/api/health",
+            "ready": "/api/ready",
+            "docs": "/docs",
+            "openapi": "/openapi.json",
+        },
+        "routes": {
+            "me": "GET /api/v1/me",
+            "dossier": "GET /api/v1/suspects/{id}/dossier",
+            "dossier_pdf": "GET /api/v1/suspects/{id}/dossier-pdf",
+            "graph": "GET /api/graph",
+            "graph_multisource": "POST /api/v1/graph/ensure-multisource",
+            "cctns_webhook": "POST /api/v1/cctns/fir-webhook",
+            "cctns_stream": "GET /api/v1/cctns/stream",
+            "cctns_firs": "GET /api/v1/cctns/firs",
+            "mo_pattern_alerts": "GET /api/v1/mo/pattern-alerts",
+            "beat_feed": "GET /api/v1/beat/feed",
+            "beat_red_zones": "GET /api/v1/beat/red-zones",
+        },
+    }
+
+
+@app.get("/")
+def root():
+    return _api_index()
+
+
+@app.get("/api")
+def api_root():
+    return _api_index()
