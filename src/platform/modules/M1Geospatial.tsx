@@ -56,6 +56,12 @@ export function M1Geospatial({ ready, onPick }: Props) {
   }, [])
 
   useEffect(() => {
+    if (window.location.hash !== '#cctns-live') return
+    const el = document.getElementById('cctns-live')
+    el?.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
+  }, [ready])
+
+  useEffect(() => {
     let live = true
     getStations().then(() => {
       if (!live) return
@@ -134,7 +140,7 @@ export function M1Geospatial({ ready, onPick }: Props) {
           )}
         </Panel>
 
-        <Panel title="CCTNS live" reference="SSE" className="shrink-0">
+        <Panel title="CCTNS live" reference="SSE" className="shrink-0" id="cctns-live">
           {liveFirs.length === 0 ? (
             <p className="px-3 py-3 text-[0.74rem] text-khaki-dim">
               Waiting for realtime FIR webhook / poller events…

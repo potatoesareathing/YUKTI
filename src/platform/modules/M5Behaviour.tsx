@@ -42,9 +42,10 @@ export function M5Behaviour() {
   const [incidents, setIncidents] = useState<Incident[]>([])
   const [selected, setSelected] = useState<string | null>(null)
   const [crossOnly, setCrossOnly] = useState(true)
-  const [view, setView] = useState<'mo' | 'offenders'>(() =>
-    new URLSearchParams(window.location.search).get('view') === 'offenders' ? 'offenders' : 'mo',
-  )
+  const [view, setView] = useState<'mo' | 'offenders'>(() => {
+    if (window.location.hash === '#dossier') return 'offenders'
+    return new URLSearchParams(window.location.search).get('view') === 'offenders' ? 'offenders' : 'mo'
+  })
   const [offenderId, setOffenderId] = useState<string | null>(null)
   const selectNode = useYukti((s) => s.selectNode)
 
@@ -67,6 +68,15 @@ export function M5Behaviour() {
     return () => {
       live = false
     }
+  }, [])
+
+  useEffect(() => {
+    if (window.location.hash !== '#dossier') return
+    setView('offenders')
+    const t = window.setTimeout(() => {
+      document.getElementById('dossier')?.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
+    }, 80)
+    return () => window.clearTimeout(t)
   }, [])
 
   const clusters = useMemo<Cluster[]>(() => {
@@ -128,6 +138,7 @@ export function M5Behaviour() {
     >
       <div className="flex min-w-0 flex-col gap-3">
         <Panel
+          id={view === 'offenders' ? 'dossier' : undefined}
           title={view === 'mo' ? 'Modus-operandi clusters' : 'Repeat offenders'}
           reference="Method signatures"
           ticked

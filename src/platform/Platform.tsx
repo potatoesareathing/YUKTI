@@ -10,6 +10,7 @@ import { useYukti, type ModuleId } from '@/store/useYukti'
 import { compact } from '@/lib/format'
 import { ID_BY_SLUG, MODULE_BY_ID, MODULES, SLUG_BY_ID } from './modules'
 import { DialScene, MapScene } from './PlatformScene'
+import { FeatureShortcuts } from './FeatureShortcuts'
 import { M1Geospatial } from './modules/M1Geospatial'
 import { M2Network } from './modules/M2Network'
 import { M3Predictive } from './modules/M3Predictive'
@@ -63,6 +64,7 @@ export function Platform() {
   return (
     <div className="flex h-[100svh] flex-col overflow-hidden bg-ink">
       <Masthead active={active} redZones={totals.redZones} incidents={totals.incidents} />
+      <FeatureShortcuts />
 
       <main className="relative min-h-0 flex-1">
         {usesScene && (
@@ -172,13 +174,7 @@ function Masthead({
           })}
         </nav>
 
-        <div className="hidden shrink-0 items-center gap-4 lg:flex">
-          <Link
-            to="/beat"
-            className="label border border-rule px-2 py-1 transition-colors hover:border-brass hover:text-brass"
-          >
-            Beat PWA
-          </Link>
+        <div className="hidden shrink-0 items-center gap-4 sm:flex">
           <div className="text-right">
             <div className="label" style={{ fontSize: 9 }}>
               Records

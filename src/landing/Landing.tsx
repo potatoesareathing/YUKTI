@@ -7,6 +7,7 @@ import { useGeo } from '@/three/useGeo'
 import { getDataSource } from '@/data/api'
 import { InstrumentFrame } from '@/ui/InstrumentFrame'
 import { useYukti, prefersReducedMotion } from '@/store/useYukti'
+import { FeatureShortcuts } from '@/platform/FeatureShortcuts'
 import { ACTS, LandingScene } from './LandingScene'
 import { ActOne, ActThree, ActTwo } from './Acts'
 import { useScrollProgress, window01 } from './useScrollProgress'
@@ -126,25 +127,30 @@ export function Landing() {
 
 function TopBar() {
   return (
-    <header className="fixed inset-x-0 top-0 z-40 flex items-center justify-between px-6 py-5 md:px-16">
-      <Link to="/" className="flex items-baseline gap-2.5">
-        <span
-          className="text-khaki"
-          style={{ fontFamily: "'Noto Serif Kannada', serif", fontSize: 20, fontWeight: 600 }}
-        >
-          ಯುಕ್ತಿ
-        </span>
-        <span className="label-brass" style={{ fontSize: 10 }}>
-          YUKTI
-        </span>
-      </Link>
+    <header className="fixed inset-x-0 top-0 z-40 px-4 py-4 sm:px-6 md:px-16 md:py-5">
+      <div className="flex items-center justify-between gap-3">
+        <Link to="/" className="flex shrink-0 items-baseline gap-2.5">
+          <span
+            className="text-khaki"
+            style={{ fontFamily: "'Noto Serif Kannada', serif", fontSize: 20, fontWeight: 600 }}
+          >
+            ಯುಕ್ತಿ
+          </span>
+          <span className="label-brass" style={{ fontSize: 10 }}>
+            YUKTI
+          </span>
+        </Link>
 
-      <Link
-        to="/platform"
-        className="label border border-rule px-3 py-1.5 text-khaki transition-colors hover:border-brass hover:text-brass"
-      >
-        Open platform →
-      </Link>
+        <Link
+          to="/platform"
+          className="label shrink-0 border border-rule px-3 py-1.5 text-khaki transition-colors hover:border-brass hover:text-brass"
+        >
+          Open platform →
+        </Link>
+      </div>
+      <div className="mt-2.5 flex justify-end overflow-x-auto">
+        <FeatureShortcuts compact />
+      </div>
     </header>
   )
 }

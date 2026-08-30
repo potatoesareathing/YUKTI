@@ -81,6 +81,11 @@ export function M2Network({ ready }: { ready: boolean }) {
     }
   }, [origins, selectNode, setPathFrom, setPathTo, selectDistrict])
 
+  useEffect(() => {
+    if (!ready || window.location.hash !== '#multisource') return
+    document.getElementById('multisource')?.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
+  }, [ready])
+
   const selected = selectedNode ? byId.get(selectedNode) : null
   const fromNode = pathFrom ? byId.get(pathFrom) : null
   const toNode = pathTo ? byId.get(pathTo) : null
@@ -192,7 +197,12 @@ export function M2Network({ ready }: { ready: boolean }) {
           </div>
         )}
 
-        <Panel title="Multi-source layers" reference="CDR · ANPR · Finance" className="shrink-0">
+        <Panel
+          id="multisource"
+          title="Multi-source layers"
+          reference="CDR · ANPR · Finance"
+          className="shrink-0"
+        >
           <div className="flex flex-col gap-2 p-3">
             <label className="flex items-center gap-2 text-[0.78rem] text-khaki">
               <input

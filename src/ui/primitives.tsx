@@ -18,11 +18,12 @@ interface PanelProps {
   className?: string
   ticked?: boolean
   scroll?: boolean
+  id?: string
 }
 
-export function Panel({ title, reference, action, children, className = '', ticked, scroll }: PanelProps) {
+export function Panel({ title, reference, action, children, className = '', ticked, scroll, id }: PanelProps) {
   return (
-    <section className={`plate ${ticked ? 'ticked' : ''} flex min-h-0 flex-col ${className}`}>
+    <section id={id} className={`plate ${ticked ? 'ticked' : ''} flex min-h-0 flex-col ${className}`}>
       {(title || reference || action) && (
         <header className="flex shrink-0 items-center justify-between gap-3 border-b border-rule px-4 py-2.5">
           <h2 className="label text-khaki">{title}</h2>

@@ -47,6 +47,12 @@ export function M6Intelligence() {
     }
   }, [])
 
+  useEffect(() => {
+    if (window.location.hash !== '#mo-patterns') return
+    const el = document.getElementById('mo-patterns')
+    el?.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
+  }, [moAlerts])
+
   const serving = models.filter((m) => m.status === 'Serving').length
   const drifting = models.filter((m) => m.drift > DRIFT_THRESHOLD).length
 
@@ -208,7 +214,7 @@ export function M6Intelligence() {
           )}
         </Panel>
 
-        <Panel title="Emerging MO patterns" reference="SCRB · >80%" ticked>
+        <Panel title="Emerging MO patterns" reference="SCRB · >80%" ticked id="mo-patterns">
           {moAlerts.length === 0 ? (
             <Empty>No cross-jurisdiction MO matches above threshold yet.</Empty>
           ) : (
