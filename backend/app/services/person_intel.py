@@ -102,8 +102,69 @@ def _incident_probe(inc: Any) -> dict[str, Any]:
     }
 
 
+def _profiles_from_graph(db: Session) -> list:
+    """Person profiles with ≥1 documented ACCUSED_IN case (not only repeat offenders)."""
+    from app.schemas import OffenderIncident, OffenderProfile
+
+    data = get_graph(db)
+    by_id = {n.id: n for n in data.nodes}
+    linked: dict[str, list] = defaultdict(list)
+    for e in data.edges:
+        if e.kind != "ACCUSED_IN":
+            continue
+        src, tgt = by_id.get(e.source), by_id.get(e.target)
+        if not src or not tgt:
+            continue
+        person = src if src.kind == "Person" else tgt if tgt.kind == "Person" else None
+        incident = src if src.kind == "Incident" else tgt if tgt.kind == "Incident" else None
+        if not person or not incident:
+            continue
+        m = incident.meta or {}
+        linked[person.id].append(
+            OffenderIncident(
+                id=incident.id,
+                docket=incident.label,
+                district=incident.district,
+                at=int(m.get("At", 0) or 0),
+                entry=str(m.get("Entry", "—")),
+                target=str(m.get("Target", "—")),
+                window=str(m.get("Window", "—")),
+            )
+        )
+
+    profiles = []
+    for pid, incidents in linked.items():
+        if not incidents:
+            continue
+        person = by_id[pid]
+        incidents.sort(key=lambda i: i.at)
+        counts: dict[str, int] = defaultdict(int)
+        for i in incidents:
+            counts[f"{i.entry} → {i.target}"] += 1
+        signature = max(counts, key=counts.get)  # type: ignore[arg-type]
+        districts = sorted({i.district for i in incidents})
+        span = max(0, (incidents[-1].at - incidents[0].at) // 86_400_000) if len(incidents) > 1 else 0
+        priors = int((person.meta or {}).get("priors", max(0, len(incidents) - 1)))
+        profiles.append(
+            OffenderProfile(
+                person=person,
+                incidents=incidents,
+                districts=districts,
+                signature=signature,
+                spanDays=span,
+                priors=priors,
+                matches=[],
+            )
+        )
+    profiles.sort(key=lambda p: len(p.incidents), reverse=True)
+    return profiles[:200]
+
+
 def _profile_index(db: Session) -> dict[str, Any]:
-    offenders = get_offender_profiles(db)
+    offenders = _profiles_from_graph(db)
+    # Fall back to classic repeat-offender list if graph parse yields nothing
+    if not offenders:
+        offenders = get_offender_profiles(db)
     graph = get_graph(db)
     by_id = {n.id: n for n in graph.nodes}
     adj: dict[str, list[tuple[str, str]]] = defaultdict(list)
@@ -111,7 +172,6 @@ def _profile_index(db: Session) -> dict[str, Any]:
         adj[e.source].append((e.target, e.kind))
         adj[e.target].append((e.source, e.kind))
 
-    # Incident locations from bootstrap incidents
     incidents = get_incidents(db)
     inc_by_id = {i.id: i for i in incidents}
 
@@ -594,7 +654,9 @@ def dashboard_metrics(db: Session) -> dict[str, Any]:
     alerts = data["alerts"]
     high = [a for a in alerts if a["investigation_relevance"] >= round(HIGH_RELEVANCE * 100)]
     investigating = [a for a in alerts if a["status"] == "investigating"]
-    offenders = get_offender_profiles(db)
+    offenders = _profiles_from_graph(db)
+    if not offenders:
+        offenders = get_offender_profiles(db)
     recurring = sum(1 for o in offenders if len(o.districts) > 1)
     return {
         "potential_matches_detected": len(alerts),
