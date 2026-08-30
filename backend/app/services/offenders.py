@@ -6,12 +6,16 @@ from sqlalchemy.orm import Session
 
 from app.schemas import GraphNode, OffenderIncident, OffenderMatch, OffenderProfile
 from app.services.graph import get_graph
-from app.services.snapshot import load
+from app.services import snapshot as snap
 
 
 def get_offender_profiles(db: Session) -> list[OffenderProfile]:
-    cached = load(db, "offenders")
-    if cached is not None:
+    # Prefer non-empty cache; an empty list is a stale snapshot (known AppSail issue).
+    cached = snap.mem_get("offenders")
+    if cached is None:
+        cached = snap.db_get(db, "offenders")
+    if cached is not None and len(cached) > 0:
+        snap.mem_set("offenders", cached)
         return [OffenderProfile.model_validate(o) for o in cached]
 
     data = get_graph(db)
@@ -49,7 +53,6 @@ def get_offender_profiles(db: Session) -> list[OffenderProfile]:
             continue
         person = by_id[pid]
         incidents.sort(key=lambda i: i.at)
-        # dominant signature
         counts: dict[str, int] = defaultdict(int)
         for i in incidents:
             counts[f"{i.entry} → {i.target}"] += 1
@@ -81,4 +84,10 @@ def get_offender_profiles(db: Session) -> list[OffenderProfile]:
         p.matches = matches[:5]
 
     profiles.sort(key=lambda p: len(p.incidents), reverse=True)
-    return profiles[:80]
+    trimmed = profiles[:80]
+    # Persist so subsequent requests (and Person Intel) see profiles
+    try:
+        snap.publish(db, "offenders", [p.model_dump() for p in trimmed])
+    except Exception:
+        snap.mem_set("offenders", [p.model_dump() for p in trimmed])
+    return trimmed
