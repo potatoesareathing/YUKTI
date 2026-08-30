@@ -43,6 +43,15 @@ def ensure_data() -> None:
 
     if has_districts and has_bootstrap:
         print("AppSail boot: snapshots present — skipping seed/nightly")
+        # Still hydrate multi-source layers onto the Catalyst FIR graph
+        from app.services.multisource import ensure_multisource_overlay
+
+        db = SessionLocal()
+        try:
+            result = ensure_multisource_overlay(db)
+            print(f"AppSail boot: multisource overlay → {result}")
+        finally:
+            db.close()
         return
 
     if not has_districts:

@@ -63,3 +63,63 @@ def test_cdr_and_anpr_ingest_and_multihop_path():
     assert path["hops"] >= 1
     assert path["nodes"][0]["id"] == "cdr:9876500001"
     assert path["nodes"][-1]["id"] == "cdr:9876500002"
+
+
+def test_ensure_overlay_from_catalyst_persons():
+    db = _session()
+    # Seed a mini Catalyst-like FIR graph (persons + co-accused + location)
+    from app.models_orm import GraphSnapshot
+
+    nodes = [
+        {
+            "id": "p1",
+            "kind": "Person",
+            "label": "A",
+            "district": "Bengaluru Urban",
+            "community": 0,
+            "centrality": 0.9,
+            "degree": 2,
+        },
+        {
+            "id": "p2",
+            "kind": "Person",
+            "label": "B",
+            "district": "Bengaluru Urban",
+            "community": 0,
+            "centrality": 0.8,
+            "degree": 2,
+        },
+        {
+            "id": "loc1",
+            "kind": "Location",
+            "label": "PS Demo",
+            "district": "Bengaluru Urban",
+            "community": 0,
+            "centrality": 0.1,
+            "degree": 0,
+        },
+    ]
+    edges = [
+        {
+            "id": "e1",
+            "source": "p1",
+            "target": "p2",
+            "kind": "CO_ACCUSED_WITH",
+            "weight": 1.0,
+            "confidence": 1.0,
+        }
+    ]
+    db.add(GraphSnapshot(id=1, nodes=nodes, edges=edges, communities=[]))
+    db.commit()
+
+    result = multisource.ensure_multisource_overlay(db)
+    assert result["status"] == "hydrated"
+    assert result["source"] == "catalyst_persons"
+    assert result["multi_source_nodes"] >= 4
+
+    again = multisource.ensure_multisource_overlay(db)
+    assert again["status"] == "already"
+
+    path = multisource.syndicate_paths(db, "p1", "p2")
+    assert path["found"] is True
+    assert path["hops"] >= 1

@@ -91,7 +91,14 @@ def syndicate_path(
     maxHops: int = Query(6, ge=1, le=12),
     db: Session = Depends(get_db),
 ):
+    multisource.ensure_multisource_overlay(db)
     return ok(multisource.syndicate_paths(db, a, b, maxHops))
+
+
+@router.post("/graph/ensure-multisource")
+def ensure_multisource(user: UserDep, db: Session = Depends(get_db), force: bool = False):
+    """Hydrate CDR/ANPR/bank from Catalyst persons, or sample CSV if none."""
+    return ok(multisource.ensure_multisource_overlay(db, force=force))
 
 
 @router.post("/rbac/mask-preview")

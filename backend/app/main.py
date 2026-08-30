@@ -40,12 +40,17 @@ async def lifespan(_app: FastAPI):
             if val is not None:
                 mem_set(key, val)
                 load_envelope_bytes(db, key)
+        # Overlay CDR/ANPR/bank onto Catalyst persons when missing
+        from app.services.multisource import ensure_multisource_overlay
+
+        result = ensure_multisource_overlay(db)
+        print(f"multisource overlay: {result.get('status')} multi={result.get('multi_source_nodes')}")
     finally:
         db.close()
     yield
 
 
-app = FastAPI(title="YUKTI API", version="1.2.0", lifespan=lifespan)
+app = FastAPI(title="YUKTI API", version="1.2.1", lifespan=lifespan)
 app.add_middleware(GZipMiddleware, minimum_size=500)
 app.add_middleware(
     CORSMiddleware,
