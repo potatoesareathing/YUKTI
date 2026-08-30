@@ -37,10 +37,25 @@ def _client_ip(request: Request) -> str:
 
 
 def _require_cctns_auth(request: Request, x_api_key: str | None) -> None:
+    """API-key gate for CCTNS webhooks.
+
+    Demo/Catalyst (`AUTH_BYPASS=true`): allow without a key (still accept a matching
+    `X-API-Key` when provided). Production: require `CCTNS_API_KEY` header match.
+    Empty `CCTNS_IP_ALLOWLIST` does not block (dev/demo default).
+    """
     settings = get_settings()
-    expected = settings.cctns_api_key
-    if not x_api_key or x_api_key != expected:
-        raise HTTPException(status_code=401, detail="Invalid or missing X-API-Key")
+    expected = (settings.cctns_api_key or "").strip()
+
+    if settings.auth_bypass:
+        # Optional key check when a key is sent — wrong key still fails so misconfig is visible.
+        if x_api_key is not None and expected and x_api_key != expected:
+            raise HTTPException(status_code=401, detail="Invalid or missing X-API-Key")
+    else:
+        if not expected:
+            raise HTTPException(status_code=503, detail="CCTNS_API_KEY not configured")
+        if not x_api_key or x_api_key != expected:
+            raise HTTPException(status_code=401, detail="Invalid or missing X-API-Key")
+
     allow = [p.strip() for p in (settings.cctns_ip_allowlist or "").split(",") if p.strip()]
     if allow:
         ip = _client_ip(request)

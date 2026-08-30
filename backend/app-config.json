@@ -8,7 +8,9 @@
     "AUDIT_READS": "false",
     "ENVIRONMENT": "production",
     "CORS_ORIGINS": "*",
-    "PYTHONPATH": "lib:."
+    "PYTHONPATH": "lib:.",
+    "CCTNS_API_KEY": "yukti-cctns-dev-key",
+    "CCTNS_IP_ALLOWLIST": ""
   },
   "memory": 2048,
   "scripts": {}

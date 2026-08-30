@@ -2,9 +2,14 @@
 
 from __future__ import annotations
 
+from unittest.mock import MagicMock, patch
+
+import pytest
+from fastapi import HTTPException
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
+from app.api.v1_routes import _require_cctns_auth
 from app.db import Base
 from app.models_orm import CaseMaster, CrimeHead, District, Unit
 from app.services import beat, cctns
@@ -114,3 +119,72 @@ def test_geofence_red_zone_hit():
     assert hit["zones"]
     miss = beat.check_geofence(db, 15.0, 75.0)
     assert miss["inside"] is False
+
+
+def _fake_request(client_host: str = "203.0.113.10", forwarded: str | None = None):
+    req = MagicMock()
+    req.headers = {}
+    if forwarded:
+        req.headers["x-forwarded-for"] = forwarded
+    req.client = MagicMock()
+    req.client.host = client_host
+    return req
+
+
+def test_cctns_auth_bypass_allows_missing_key():
+    settings = MagicMock(
+        auth_bypass=True,
+        cctns_api_key="yukti-cctns-dev-key",
+        cctns_ip_allowlist="",
+    )
+    with patch("app.api.v1_routes.get_settings", return_value=settings):
+        _require_cctns_auth(_fake_request(), None)
+        _require_cctns_auth(_fake_request(), "yukti-cctns-dev-key")
+
+
+def test_cctns_auth_bypass_rejects_wrong_key():
+    settings = MagicMock(
+        auth_bypass=True,
+        cctns_api_key="yukti-cctns-dev-key",
+        cctns_ip_allowlist="",
+    )
+    with patch("app.api.v1_routes.get_settings", return_value=settings):
+        with pytest.raises(HTTPException) as exc:
+            _require_cctns_auth(_fake_request(), "wrong-key")
+        assert exc.value.status_code == 401
+
+
+def test_cctns_auth_requires_key_when_bypass_off():
+    settings = MagicMock(
+        auth_bypass=False,
+        cctns_api_key="yukti-cctns-dev-key",
+        cctns_ip_allowlist="",
+    )
+    with patch("app.api.v1_routes.get_settings", return_value=settings):
+        with pytest.raises(HTTPException) as exc:
+            _require_cctns_auth(_fake_request(), None)
+        assert exc.value.status_code == 401
+        _require_cctns_auth(_fake_request(), "yukti-cctns-dev-key")
+
+
+def test_cctns_auth_empty_allowlist_does_not_block():
+    settings = MagicMock(
+        auth_bypass=False,
+        cctns_api_key="yukti-cctns-dev-key",
+        cctns_ip_allowlist="",
+    )
+    with patch("app.api.v1_routes.get_settings", return_value=settings):
+        _require_cctns_auth(_fake_request(client_host="198.51.100.1"), "yukti-cctns-dev-key")
+
+
+def test_cctns_auth_allowlist_enforced_when_set():
+    settings = MagicMock(
+        auth_bypass=False,
+        cctns_api_key="yukti-cctns-dev-key",
+        cctns_ip_allowlist="10.0.0.1,10.0.0.2",
+    )
+    with patch("app.api.v1_routes.get_settings", return_value=settings):
+        with pytest.raises(HTTPException) as exc:
+            _require_cctns_auth(_fake_request(client_host="198.51.100.1"), "yukti-cctns-dev-key")
+        assert exc.value.status_code == 403
+        _require_cctns_auth(_fake_request(client_host="10.0.0.2"), "yukti-cctns-dev-key")
