@@ -17,6 +17,7 @@ import { M3Predictive } from './modules/M3Predictive'
 import { M4Trends } from './modules/M4Trends'
 import { M5Behaviour } from './modules/M5Behaviour'
 import { M6Intelligence } from './modules/M6Intelligence'
+import { M7PersonIntel } from './modules/M7PersonIntel'
 
 /**
  * The platform shell.
@@ -90,6 +91,7 @@ export function Platform() {
           {active === 'MOD-04' && <M4Trends />}
           {active === 'MOD-05' && <M5Behaviour />}
           {active === 'MOD-06' && <M6Intelligence />}
+          {active === 'MOD-07' && <M7PersonIntel />}
         </div>
       </main>
 

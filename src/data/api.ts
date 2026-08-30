@@ -673,6 +673,147 @@ export async function extractMoNarrative(narrative: string) {
   return env.data
 }
 
+/* ─── Person Intelligence (MOD-07) ─────────────────────────────────────── */
+
+export type PersonIntelDashboard = {
+  potential_matches_detected: number
+  high_relevance_matches: number
+  marked_for_investigation: number
+  recurring_documented_patterns: number
+  documented_person_profiles: number
+  disclaimer?: string
+  probe_id?: string
+  synthetic_probe?: boolean
+}
+
+export type PersonIntelSearchHit = {
+  person_id: string
+  name: string
+  district: string
+  match_kind: string
+  documented_cases: number
+  mo_signature: string
+  priors: number
+}
+
+export type PersonIntelProfile = {
+  person_id: string
+  name: string
+  aliases: string[]
+  age?: number | null
+  district: string
+  priors: number
+  documented_cases: number
+  crime_types: { type: string; count: number }[]
+  historical_locations: { district: string; count: number }[]
+  most_frequent_crime_type: string | null
+  frequently_occurring_location: string | null
+  associated_vehicles: { id: string; label: string; kind: string; synthetic?: boolean }[]
+  associated_persons: { id: string; label: string; kind: string; edge: string; district: string }[]
+  documented_mo_patterns: { signature: string; count: number }[]
+  mo_signature: string | null
+  timeline: {
+    case_id: string
+    docket: string
+    district: string
+    at: number
+    mo: string
+    timing: string
+    category: string
+    lonLat: number[] | null
+  }[]
+  map_points: {
+    case_id: string
+    docket: string
+    district: string
+    lonLat: number[]
+    at: number
+    category: string
+  }[]
+  span_days: number
+  case_status: string
+  data_notes: string[]
+  decision_support: string
+}
+
+export type PersonIntelAlert = {
+  id: string
+  title: string
+  summary: string
+  person_id: string
+  person_name: string
+  previous_related_cases: number
+  investigation_relevance: number
+  mo_similarity_pct: number | null
+  geographic_overlap: string
+  reasons: { factor: string; label: string; score_pct: number; explanation: string; evidence_refs: string[] }[]
+  status: string
+  requires_officer_verification: boolean
+  probe?: { id: string; docket?: string; synthetic?: boolean }
+}
+
+export type PersonIntelMatchResult = {
+  probe: Record<string, unknown>
+  matches: {
+    person_id: string
+    name: string
+    district: string
+    documented_cases: number
+    match_kind: string
+    alert_eligible: boolean
+    relevance: {
+      investigation_relevance: number
+      factors: Record<string, { score_pct: number | null; available: boolean; explanation: string; evidence_refs: string[] }>
+      reasons: { factor: string; label: string; score_pct: number; explanation: string; evidence_refs: string[] }[]
+      disclaimer: string
+    }
+  }[]
+  disclaimer: string
+}
+
+async function personIntelGet<T>(path: string): Promise<T> {
+  const res = await fetch(`${BASE}${path}`)
+  if (!res.ok) throw new Error(`Person Intel request failed (${res.status})`)
+  const env = (await res.json()) as Envelope<T>
+  return env.data
+}
+
+export function fetchPersonIntelDashboard() {
+  return personIntelGet<PersonIntelDashboard>('/api/v1/person-intel/dashboard')
+}
+
+export async function fetchPersonIntelAlerts(limit = 40) {
+  return personIntelGet<{ alerts: PersonIntelAlert[]; probe?: PersonIntelAlert['probe']; disclaimer?: string }>(
+    `/api/v1/person-intel/alerts?limit=${limit}`,
+  )
+}
+
+export function searchPersonIntel(q: string, limit = 40) {
+  return personIntelGet<PersonIntelSearchHit[]>(
+    `/api/v1/person-intel/search?q=${encodeURIComponent(q)}&limit=${limit}`,
+  )
+}
+
+export function fetchPersonIntelProfile(personId: string) {
+  return personIntelGet<PersonIntelProfile>(`/api/v1/person-intel/persons/${encodeURIComponent(personId)}`)
+}
+
+export function fetchPersonIntelMatch(incidentId?: string, limit = 15) {
+  const q = incidentId ? `?incidentId=${encodeURIComponent(incidentId)}&limit=${limit}` : `?limit=${limit}`
+  return personIntelGet<PersonIntelMatchResult>(`/api/v1/person-intel/match${q}`)
+}
+
+export async function setPersonIntelAlertStatus(alertId: string, status: 'open' | 'investigating' | 'dismissed') {
+  const res = await fetch(`${BASE}/api/v1/person-intel/alerts/${encodeURIComponent(alertId)}/status`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ status }),
+  })
+  if (!res.ok) throw new Error(`Alert status update failed (${res.status})`)
+  const env = (await res.json()) as Envelope<{ alert_id: string; status: string }>
+  return env.data
+}
+
 /** Log evidence-drawer opens — §10.1 */
 export async function logAudit(action: string, resourceRefs: string[], detail = ''): Promise<void> {
   try {

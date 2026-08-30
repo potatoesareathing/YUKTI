@@ -66,6 +66,14 @@ export const MODULES: ModuleMeta[] = [
     purpose: 'Model portfolio, anomaly queue, hidden-correlation discovery.',
     scene: 'none',
   },
+  {
+    id: 'MOD-07',
+    short: 'Persons',
+    name: 'Person Intelligence & Alerts',
+    kannada: 'ವ್ಯಕ್ತಿ ಬುದ್ಧಿ',
+    purpose: 'Documented person profiles, investigation relevance, potential-match alerts.',
+    scene: 'none',
+  },
 ]
 
 export const MODULE_BY_ID = new Map(MODULES.map((m) => [m.id, m]))
@@ -78,6 +86,7 @@ export const SLUG_BY_ID: Record<ModuleId, string> = {
   'MOD-04': 'trends',
   'MOD-05': 'behaviour',
   'MOD-06': 'intelligence',
+  'MOD-07': 'persons',
 }
 
 export const ID_BY_SLUG: Record<string, ModuleId> = Object.fromEntries(

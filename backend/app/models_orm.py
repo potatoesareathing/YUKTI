@@ -324,3 +324,14 @@ class MoPatternAlert(Base):
     shared_tags: Mapped[list] = mapped_column(JsonType, default=list)
     payload: Mapped[dict] = mapped_column(JsonType, default=dict)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, index=True)
+
+
+class PersonIntelAlertState(Base):
+    """Officer disposition for Person Intelligence potential-match alerts."""
+
+    __tablename__ = "person_intel_alert_state"
+
+    alert_id: Mapped[str] = mapped_column(String(128), primary_key=True)
+    status: Mapped[str] = mapped_column(String(32), default="open", index=True)  # open|investigating|dismissed
+    updated_by: Mapped[str] = mapped_column(String(128), default="")
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)

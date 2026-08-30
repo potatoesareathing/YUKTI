@@ -2,7 +2,7 @@ import { create } from 'zustand'
 import { CRIME_CATEGORIES, type CrimeCategory, type Evidence } from '@/data/types'
 import { NOW, PERIOD_DAYS } from '@/data/districts'
 
-export type ModuleId = 'MOD-01' | 'MOD-02' | 'MOD-03' | 'MOD-04' | 'MOD-05' | 'MOD-06'
+export type ModuleId = 'MOD-01' | 'MOD-02' | 'MOD-03' | 'MOD-04' | 'MOD-05' | 'MOD-06' | 'MOD-07'
 
 /** What the 3D scene is currently showing. The landing acts drive this too. */
 export type SceneMode = 'state' | 'hotspot' | 'network'

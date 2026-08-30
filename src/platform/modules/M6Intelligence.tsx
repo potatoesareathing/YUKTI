@@ -1,5 +1,6 @@
-import { DRIFT_THRESHOLD, fetchMoPatternAlerts, getAnomalies, getModelCards, type MoPatternAlert } from '@/data/api'
+import { DRIFT_THRESHOLD, fetchMoPatternAlerts, fetchPersonIntelDashboard, getAnomalies, getModelCards, type MoPatternAlert, type PersonIntelDashboard } from '@/data/api'
 import { useEffect, useMemo, useState } from 'react'
+import { Link } from 'react-router-dom'
 import { Panel, Stat, Bar, DecisionSupportNote, Empty } from '@/ui/primitives'
 import { useEvidence } from '@/ui/EvidenceDrawer'
 import { MoCompareModal } from '@/ui/MoCompareModal'
@@ -30,6 +31,7 @@ const STATUS_STYLE: Record<ModelCard['status'], { color: string; glyph: string }
 export function M6Intelligence() {
   const [anomalies, setAnomalies] = useState<AnomalyFlag[]>([])
   const [moAlerts, setMoAlerts] = useState<MoPatternAlert[]>([])
+  const [personDash, setPersonDash] = useState<PersonIntelDashboard | null>(null)
   const [compare, setCompare] = useState<MoPatternAlert | null>(null)
   const models = useMemo(() => getModelCards(), [])
   const openEvidence = useEvidence()
@@ -42,6 +44,13 @@ export function M6Intelligence() {
     fetchMoPatternAlerts(30).then((a) => {
       if (live) setMoAlerts(a)
     })
+    fetchPersonIntelDashboard()
+      .then((d) => {
+        if (live) setPersonDash(d)
+      })
+      .catch(() => {
+        /* optional panel */
+      })
     return () => {
       live = false
     }
@@ -212,6 +221,26 @@ export function M6Intelligence() {
           ) : (
             <Empty>Loading anomaly flags.</Empty>
           )}
+        </Panel>
+
+        <Panel title="Person Intelligence" reference="MOD-07" ticked id="person-intel-dash">
+          <div className="grid grid-cols-2 gap-3 p-3">
+            <Stat label="Potential matches" value={String(personDash?.potential_matches_detected ?? '—')} tone="brass" />
+            <Stat label="High relevance" value={String(personDash?.high_relevance_matches ?? '—')} tone="alert" />
+            <Stat label="For investigation" value={String(personDash?.marked_for_investigation ?? '—')} />
+            <Stat label="Documented profiles" value={String(personDash?.documented_person_profiles ?? '—')} />
+          </div>
+          <div className="border-t border-rule p-3">
+            <Link
+              to="/platform/persons#alerts"
+              className="label block border border-brass/40 px-2 py-2 text-center text-brass hover:bg-brass/10"
+            >
+              Open Person Intelligence →
+            </Link>
+            <p className="mt-2 text-[0.7rem] text-khaki-dim">
+              Decision-support relevance only — requires officer verification.
+            </p>
+          </div>
         </Panel>
 
         <Panel title="Emerging MO patterns" reference="SCRB · >80%" ticked id="mo-patterns">

@@ -22,6 +22,7 @@ from app.services.dossier import build_dossier
 from app.services.dossier_pdf import render_ksp_dossier_pdf
 from app.services.kannada_nlp import extract_mo_entities
 from app.services.mo_match import list_pattern_alerts, mo_similarity
+from app.services import person_intel as person_intel_svc
 from app.services.realtime import bus
 
 router = APIRouter(prefix="/api/v1")
@@ -239,6 +240,55 @@ def beat_geofence(body: dict, user: UserDep, db: Session = Depends(get_db)):
 def mask_preview(records: list[dict], user: UserDep):
     """Utility endpoint for tests/UI: apply FIR scope + sensitive masking."""
     return ok(filter_fir_records(records, user))
+
+
+@router.get("/person-intel/dashboard")
+def person_intel_dashboard(user: UserDep, db: Session = Depends(get_db)):
+    return ok(person_intel_svc.dashboard_metrics(db))
+
+
+@router.get("/person-intel/search")
+def person_intel_search(user: UserDep, db: Session = Depends(get_db), q: str = Query("", min_length=0), limit: int = Query(40, ge=1, le=100)):
+    return ok(person_intel_svc.search_persons(db, q, limit))
+
+
+@router.get("/person-intel/persons/{person_id}")
+def person_intel_profile(person_id: str, user: UserDep, db: Session = Depends(get_db)):
+    try:
+        return ok(person_intel_svc.build_person_profile(db, person_id, user))
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@router.get("/person-intel/match")
+def person_intel_match(
+    user: UserDep,
+    db: Session = Depends(get_db),
+    incidentId: str | None = Query(None),
+    limit: int = Query(15, ge=1, le=50),
+):
+    try:
+        return ok(person_intel_svc.match_incident(db, incident_id=incidentId, limit=limit))
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@router.post("/person-intel/match")
+def person_intel_match_probe(body: dict, user: UserDep, db: Session = Depends(get_db), limit: int = Query(15, ge=1, le=50)):
+    return ok(person_intel_svc.match_incident(db, probe_body=body, limit=limit))
+
+
+@router.get("/person-intel/alerts")
+def person_intel_alerts(user: UserDep, db: Session = Depends(get_db), limit: int = Query(40, ge=1, le=100)):
+    return ok(person_intel_svc.list_alerts(db, limit))
+
+
+@router.post("/person-intel/alerts/{alert_id}/status")
+def person_intel_alert_status(alert_id: str, body: dict, user: UserDep, db: Session = Depends(get_db)):
+    try:
+        return ok(person_intel_svc.set_alert_status(db, alert_id, str(body.get("status") or ""), user.user_id))
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 @router.get("/me")

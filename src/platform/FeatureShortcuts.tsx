@@ -35,6 +35,12 @@ const FEATURES = [
     hint: 'PDF export',
     to: '/platform/behaviour?view=offenders#dossier',
   },
+  {
+    id: 'persons',
+    label: 'Person Intel',
+    hint: 'MOD-07 alerts',
+    to: '/platform/persons#alerts',
+  },
 ] as const
 
 function isActive(pathname: string, search: string, hash: string, to: string): boolean {

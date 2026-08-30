@@ -59,7 +59,7 @@ async def lifespan(_app: FastAPI):
     yield
 
 
-app = FastAPI(title="YUKTI API", version="1.3.0", lifespan=lifespan)
+app = FastAPI(title="YUKTI API", version="1.4.0", lifespan=lifespan)
 app.add_middleware(GZipMiddleware, minimum_size=500)
 app.add_middleware(
     CORSMiddleware,
@@ -95,6 +95,11 @@ def _api_index() -> dict:
             "mo_pattern_alerts": "GET /api/v1/mo/pattern-alerts",
             "beat_feed": "GET /api/v1/beat/feed",
             "beat_red_zones": "GET /api/v1/beat/red-zones",
+            "person_intel_dashboard": "GET /api/v1/person-intel/dashboard",
+            "person_intel_alerts": "GET /api/v1/person-intel/alerts",
+            "person_intel_search": "GET /api/v1/person-intel/search",
+            "person_intel_profile": "GET /api/v1/person-intel/persons/{id}",
+            "person_intel_match": "GET|POST /api/v1/person-intel/match",
         },
     }
 
