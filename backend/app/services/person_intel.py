@@ -28,6 +28,9 @@ WEIGHTS = {
 ALERT_THRESHOLD = 0.70
 HIGH_RELEVANCE = 0.85
 
+_CACHE: dict[str, Any] = {"at": 0.0, "index": None}
+_CACHE_TTL_SEC = 120.0
+
 
 def _now_ms() -> int:
     return int(datetime.now(tz=timezone.utc).timestamp() * 1000)
@@ -161,8 +164,13 @@ def _profiles_from_graph(db: Session) -> list:
 
 
 def _profile_index(db: Session) -> dict[str, Any]:
+    import time
+
+    now = time.time()
+    if _CACHE["index"] is not None and now - float(_CACHE["at"]) < _CACHE_TTL_SEC:
+        return _CACHE["index"]  # type: ignore[return-value]
+
     offenders = _profiles_from_graph(db)
-    # Fall back to classic repeat-offender list if graph parse yields nothing
     if not offenders:
         offenders = get_offender_profiles(db)
     graph = get_graph(db)
@@ -175,13 +183,89 @@ def _profile_index(db: Session) -> dict[str, Any]:
     incidents = get_incidents(db)
     inc_by_id = {i.id: i for i in incidents}
 
-    return {
+    # Precompute lightweight fingerprints for fast matching
+    fingerprints: dict[str, dict[str, Any]] = {}
+    for o in offenders:
+        cats: Counter[str] = Counter()
+        locs: Counter[str] = Counter()
+        mo_sigs: Counter[str] = Counter()
+        buckets: Counter[str] = Counter()
+        for oi in o.incidents:
+            full = inc_by_id.get(oi.id)
+            cat = str(full.category) if full is not None else str((by_id.get(oi.id).meta or {}).get("Category", "Unknown") if by_id.get(oi.id) else "Unknown")
+            cats[cat] += 1
+            locs[oi.district] += 1
+            mo_sigs[f"{oi.entry} → {oi.target}"] += 1
+            buckets[_hour_bucket(oi.at)] += 1
+        vehicles = []
+        associates = []
+        for other_id, kind in adj.get(o.person.id, []):
+            other = by_id.get(other_id)
+            if not other:
+                continue
+            if other.kind in ("ANPR_Vehicle", "Vehicle"):
+                vehicles.append(other.label.upper())
+            elif other.kind == "Person" and other.id != o.person.id:
+                associates.append(other.id)
+        fingerprints[o.person.id] = {
+            "crime_types": set(cats),
+            "locations": set(locs),
+            "mo_signature": o.signature,
+            "mo_tokens": _tokens(" ".join(mo_sigs.keys())),
+            "time_buckets": buckets,
+            "vehicles": set(vehicles),
+            "associates": set(associates),
+            "case_ids": [i.id for i in o.incidents],
+            "documented_cases": len(o.incidents),
+        }
+
+    idx = {
         "offenders": offenders,
         "by_id": by_id,
         "adj": adj,
         "inc_by_id": inc_by_id,
         "graph": graph,
+        "fingerprints": fingerprints,
     }
+    _CACHE["index"] = idx
+    _CACHE["at"] = now
+    return idx
+
+
+def _score_fingerprint(probe: dict[str, Any], fp: dict[str, Any], network_ids: set[str]) -> dict[str, Any]:
+    """Fast path scoring using precomputed fingerprints."""
+    profile_lite = {
+        "crime_types": [{"type": t, "count": 1} for t in fp["crime_types"]],
+        "documented_mo_patterns": [{"signature": fp["mo_signature"], "count": 1}],
+        "mo_signature": fp["mo_signature"],
+        "historical_locations": [{"district": d, "count": 1} for d in fp["locations"]],
+        "timeline": [{"at": 0, "case_id": cid, "category": next(iter(fp["crime_types"]), "Unknown")} for cid in fp["case_ids"][:1]],
+        "map_points": [],
+        "associated_persons": [{"id": a} for a in fp["associates"]],
+        "associated_vehicles": [{"label": v} for v in fp["vehicles"]],
+    }
+    # Prefer token Jaccard for MO using fingerprint tokens
+    scored = score_relevance(probe, profile_lite, network_ids)
+    # Overlay time bucket from fingerprint if probe has time
+    pb = _hour_bucket(int(probe.get("at") or 0))
+    buckets: Counter = fp.get("time_buckets") or Counter()
+    if pb and buckets and scored["factors"]["time_pattern"]["available"] is False:
+        total = sum(buckets.values()) or 1
+        share = buckets.get(pb, 0) / total
+        scored["factors"]["time_pattern"] = {
+            "score_pct": round(share * 100),
+            "available": True,
+            "explanation": f"Incident time window ({pb}) vs documented activity distribution",
+            "evidence_refs": [f"{k}:{v}" for k, v in buckets.most_common()],
+        }
+        # recompute overall with updated time factor
+        avail = {k: v for k, v in scored["factors"].items() if v.get("available") and v.get("score_pct") is not None}
+        if avail:
+            wsum = sum(WEIGHTS[k] for k in avail if k in WEIGHTS)
+            overall = sum(WEIGHTS[k] / wsum * (float(avail[k]["score_pct"]) / 100.0) for k in avail if k in WEIGHTS)
+            scored["investigation_relevance"] = round(overall * 100)
+            scored["investigation_relevance_01"] = round(overall, 4)
+    return scored
 
 
 def build_person_profile(db: Session, person_id: str, user: UserContext | None = None) -> dict[str, Any]:
@@ -558,9 +642,16 @@ def match_incident(
                 network_ids.add(other_id)
 
     matches: list[dict[str, Any]] = []
+    fps = idx.get("fingerprints") or {}
     for o in idx["offenders"]:
-        profile = build_person_profile(db, o.person.id)
-        scored = score_relevance(probe, profile, network_ids)
+        fp = fps.get(o.person.id)
+        if fp:
+            scored = _score_fingerprint(probe, fp, network_ids)
+            documented = int(fp["documented_cases"])
+        else:
+            profile = build_person_profile(db, o.person.id)
+            scored = score_relevance(probe, profile, network_ids)
+            documented = len(o.incidents)
         if scored["investigation_relevance_01"] < 0.45:
             continue
         matches.append(
@@ -568,7 +659,7 @@ def match_incident(
                 "person_id": o.person.id,
                 "name": o.person.label,
                 "district": o.person.district,
-                "documented_cases": len(o.incidents),
+                "documented_cases": documented,
                 "match_kind": "relevance_potential_match",
                 "relevance": scored,
                 "alert_eligible": scored["investigation_relevance_01"] >= ALERT_THRESHOLD,
